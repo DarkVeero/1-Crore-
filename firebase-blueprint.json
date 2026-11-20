@@ -1,0 +1,278 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User plan, display name, and reminder preferences for 1 Crore Durood Pak goal.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owner."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User display name."
+        },
+        "dailyTarget": {
+          "type": "integer",
+          "description": "Daily Durood Pak target."
+        },
+        "setupCompleted": {
+          "type": "boolean",
+          "description": "Whether initial plan setup has been completed."
+        },
+        "reminder1Hour": {
+          "type": "integer",
+          "description": "First daily reminder hour (0-23)."
+        },
+        "reminder1Minute": {
+          "type": "integer",
+          "description": "First daily reminder minute (0-59)."
+        },
+        "reminder2Hour": {
+          "type": "integer",
+          "description": "Second daily reminder hour (0-23)."
+        },
+        "reminder2Minute": {
+          "type": "integer",
+          "description": "Second daily reminder minute (0-59)."
+        },
+        "remindersEnabled": {
+          "type": "boolean",
+          "description": "Whether daily reminders are enabled."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of creation (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "userId",
+        "displayName",
+        "dailyTarget",
+        "setupCompleted",
+        "reminder1Hour",
+        "reminder1Minute",
+        "reminder2Hour",
+        "reminder2Minute",
+        "remindersEnabled",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "DailyCount": {
+      "title": "DailyCount",
+      "description": "Daily Durood Pak recitation count keyed by ISO date yyyy-MM-dd.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owner."
+        },
+        "dateKey": {
+          "type": "string",
+          "description": "ISO local date yyyy-MM-dd."
+        },
+        "count": {
+          "type": "integer",
+          "description": "Total Durood Pak recited on this date."
+        },
+        "clientUpdatedAt": {
+          "type": "integer",
+          "description": "Client epoch millis of the latest local edit."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of creation (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "userId",
+        "dateKey",
+        "count",
+        "clientUpdatedAt",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CustomCounter": {
+      "title": "CustomCounter",
+      "description": "User-created standalone counter with custom name and target count.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owner."
+        },
+        "name": {
+          "type": "string",
+          "description": "Custom counter name."
+        },
+        "targetCount": {
+          "type": "integer",
+          "description": "Fixed target count set by user."
+        },
+        "currentCount": {
+          "type": "integer",
+          "description": "Current accumulated count."
+        },
+        "clientUpdatedAt": {
+          "type": "integer",
+          "description": "Client epoch millis of the latest local edit."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of creation (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "userId",
+        "name",
+        "targetCount",
+        "currentCount",
+        "clientUpdatedAt",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "GlobalStats": {
+      "title": "GlobalStats",
+      "description": "Server-computed read-only aggregate of the main 1-Crore Durood counter across all users, updated every 12 hours.",
+      "type": "object",
+      "properties": {
+        "totalCount": {
+          "type": "integer",
+          "description": "Aggregate main 1-Crore Durood count across all users."
+        },
+        "userCount": {
+          "type": "integer",
+          "description": "Total number of users included in the aggregate."
+        }
+      },
+      "required": [
+        "totalCount",
+        "userCount"
+      ]
+    },
+    "AnnouncementButton": {
+      "title": "AnnouncementButton",
+      "description": "Optional call-to-action button metadata embedded in an Announcement document.",
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "Button label displayed in the announcement dialog."
+        },
+        "action": {
+          "type": "string",
+          "enum": ["none", "update", "share", "link"],
+          "description": "Action type performed when tapped."
+        },
+        "url": {
+          "type": "string",
+          "description": "Target HTTPS/HTTP URL when action is link."
+        }
+      }
+    },
+    "Announcement": {
+      "title": "Announcement",
+      "description": "Read-only server/admin-published in-app announcement document.",
+      "type": "object",
+      "properties": {
+        "active": {
+          "type": "boolean",
+          "description": "Whether the announcement is currently enabled."
+        },
+        "title": {
+          "type": "string",
+          "description": "Announcement headline."
+        },
+        "body": {
+          "type": "string",
+          "description": "Announcement message body."
+        },
+        "button": {
+          "$ref": "#/entities/AnnouncementButton",
+          "description": "Optional action button configuration."
+        },
+        "startAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Start timestamp when announcement becomes eligible."
+        },
+        "endAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Expiration timestamp after which announcement is ignored."
+        },
+        "maxShowsPerDay": {
+          "type": "integer",
+          "description": "Maximum impressions per user per local day."
+        },
+        "maxShowsPerWeek": {
+          "type": "integer",
+          "description": "Maximum impressions per user per rolling 7-day window."
+        },
+        "priority": {
+          "type": "integer",
+          "description": "Sort priority (higher values take precedence)."
+        }
+      },
+      "required": [
+        "active",
+        "title",
+        "body"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "Per-user profile and 1 Crore plan configuration."
+    },
+    "/users/{userId}/daily_counts/{dateKey}": {
+      "schema": {
+        "$ref": "#/entities/DailyCount"
+      },
+      "description": "Per-user daily Durood Pak count logs."
+    },
+    "/users/{userId}/custom_counters/{counterId}": {
+      "schema": {
+        "$ref": "#/entities/CustomCounter"
+      },
+      "description": "Per-user standalone custom counters."
+    },
+    "/stats/global": {
+      "schema": {
+        "$ref": "#/entities/GlobalStats"
+      },
+      "description": "Read-only server-computed global aggregate for main 1-Crore Durood counter."
+    },
+    "/announcements/{announcementId}": {
+      "schema": {
+        "$ref": "#/entities/Announcement"
+      },
+      "description": "Read-only admin-published in-app announcements."
+    }
+  }
+}

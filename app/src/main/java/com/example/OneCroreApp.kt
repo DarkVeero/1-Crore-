@@ -1,0 +1,30 @@
+package com.example
+
+import android.app.Application
+import androidx.work.Configuration
+import com.example.announcements.AnnouncementNotificationHelper
+import com.example.notifications.ReminderScheduler
+import com.example.update.UpdateCheckWorker
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+
+class OneCroreApp : Application(), Configuration.Provider {
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder().build()
+
+    override fun onCreate() {
+        super.onCreate()
+        ReminderScheduler.ensureNotificationChannel(this)
+        AnnouncementNotificationHelper.ensureNotificationChannel(this)
+        appScope.launch {
+            AnnouncementNotificationHelper.ensureSubscribedToAnnouncementsTopic(this@OneCroreApp)
+            UpdateCheckWorker.scheduleDailyCheck(this@OneCroreApp)
+            ReminderScheduler.rescheduleFromSavedStateIfPossible(this@OneCroreApp)
+            com.example.announcements.AnnouncementScheduledDispatcher.reschedulePendingAnnouncements(this@OneCroreApp)
+        }
+    }
+}
