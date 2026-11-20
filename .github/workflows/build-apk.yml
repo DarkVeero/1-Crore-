@@ -20,7 +20,7 @@ jobs:
           SDK=/usr/local/lib/android/sdk
           echo "ANDROID_HOME=$SDK" >> $GITHUB_ENV
           echo "ANDROID_SDK_ROOT=$SDK" >> $GITHUB_ENV
-          if [ -d "$SDK/cmdline-tools/latest" ]; then CT="$SDK/cmdline-tools/latest"; else CT=$(ls -d $SDK/cmdline-tools/*/ | sort -V | tail -1); fi
+          if [ -d "$SDK/cmdline-tools/latest" ]; then CT="$SDK/cmdline-tools/latest"; else CT=$(ls -d $SDK/cmdline-tools/*/ | sort -V | tail -n1); fi
           echo "Using cmdline-tools: $CT"
           yes | "$CT/bin/sdkmanager" --licenses || true
           "$CT/bin/sdkmanager" "platform-tools" "platforms;android-36" "build-tools;36.0.0"
@@ -33,9 +33,11 @@ jobs:
 
       - name: Restore debug keystore from secret
         run: |
-          echo "$DEBUG_KEYSTORE_B64" | base64 -d > debug.keystore
+          echo "${DEBUG_KEYSTORE_B64_PART1}${DEBUG_KEYSTORE_B64_PART2}" | base64 -d > debug.keystore
+          ls -la debug.keystore
         env:
-          DEBUG_KEYSTORE_B64: ${{ secrets.DEBUG_KEYSTORE }}
+          DEBUG_KEYSTORE_B64_PART1: ${{ secrets.DEBUG_KEYSTORE_B64_PART1 }}
+          DEBUG_KEYSTORE_B64_PART2: ${{ secrets.DEBUG_KEYSTORE_B64_PART2 }}
 
       - name: Verify debug keystore
         run: keytool -list -keystore debug.keystore -storepass android -alias androiddebugkey
