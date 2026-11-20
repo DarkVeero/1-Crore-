@@ -33,11 +33,25 @@ jobs:
 
       - name: Restore debug keystore from secret
         run: |
-          echo "${DEBUG_KEYSTORE_B64_PART1}${DEBUG_KEYSTORE_B64_PART2}" | base64 -d > debug.keystore
+          echo -n "$KS1" | wc -c
+          echo -n "$KS2" | wc -c
+          echo -n "$KS3" | wc -c
+          echo -n "$KS4" | wc -c
+          echo -n "$KS5" | wc -c
+          echo -n "$KS6" | wc -c
+          echo -n "$KS7" | wc -c
+          echo -n "$KS8" | wc -c
+          echo "${KS1}${KS2}${KS3}${KS4}${KS5}${KS6}${KS7}${KS8}" | base64 -d > debug.keystore
           ls -la debug.keystore
         env:
-          DEBUG_KEYSTORE_B64_PART1: ${{ secrets.DEBUG_KEYSTORE_B64_PART1 }}
-          DEBUG_KEYSTORE_B64_PART2: ${{ secrets.DEBUG_KEYSTORE_B64_PART2 }}
+          KS1: ${{ secrets.KS1 }}
+          KS2: ${{ secrets.KS2 }}
+          KS3: ${{ secrets.KS3 }}
+          KS4: ${{ secrets.KS4 }}
+          KS5: ${{ secrets.KS5 }}
+          KS6: ${{ secrets.KS6 }}
+          KS7: ${{ secrets.KS7 }}
+          KS8: ${{ secrets.KS8 }}
 
       - name: Verify debug keystore
         run: keytool -list -keystore debug.keystore -storepass android -alias androiddebugkey
