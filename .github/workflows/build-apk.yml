@@ -37,6 +37,9 @@ jobs:
         env:
           DEBUG_KEYSTORE_B64: ${{ secrets.DEBUG_KEYSTORE }}
 
+      - name: Verify debug keystore
+        run: keytool -list -keystore debug.keystore -storepass android -alias androiddebugkey
+
       - name: Set up Gradle 9.3.1
         uses: gradle/actions/setup-gradle@v3
         with:
