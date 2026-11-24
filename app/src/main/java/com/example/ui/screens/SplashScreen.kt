@@ -299,7 +299,9 @@ fun AnimatedLogoLoadingScreen(
     val reduceMotion = rememberReduceMotion()
     val isLowRam = remember(context) { isLowEndOrLowRamDevice(context) }
     val staticFallback = SplashIntroSpec.shouldUseStaticSplashLogo(reduceMotion, isLowRam)
-    val shouldAnimateIntro = playPostSignupIntro && offlineErrorMessage == null && !staticFallback
+    // FIX: never replay the intro after login if the cold-start SplashScreen already played it
+    // this process — one seamless splash under 1s, not two.
+    val shouldAnimateIntro = playPostSignupIntro && offlineErrorMessage == null && !staticFallback && !SplashSessionGuard.hasPlayedColdStartSplash
 
     val elapsedMs = remember(playPostSignupIntro, staticFallback) {
         Animatable(if (shouldAnimateIntro) 0f else SplashIntroSpec.RING_END_MS.toFloat())
@@ -311,6 +313,15 @@ fun AnimatedLogoLoadingScreen(
     LaunchedEffect(playPostSignupIntro, staticFallback, offlineErrorMessage) {
         if (!playPostSignupIntro) return@LaunchedEffect
         if (offlineErrorMessage != null) return@LaunchedEffect
+        if (SplashSessionGuard.hasPlayedColdStartSplash) {
+            // FIX: the cold-start SplashScreen already played this intro once this
+            // process — never replay it after login. Show the completed logo and
+            // finish immediately so the splash stays under 1s.
+            SplashIntroSpec.recordPostSignupIntro(wasStatic = true)
+            introComplete = true
+            onPostSignupIntroFinished()
+            return@LaunchedEffect
+        }
         if (staticFallback) {
             SplashIntroSpec.recordPostSignupIntro(wasStatic = true)
             introComplete = true
