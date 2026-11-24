@@ -25,7 +25,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -47,10 +46,8 @@ import com.example.ui.components.BlackPillButton
 import com.example.ui.components.FaintGridBackground
 import com.example.ui.components.WhiteBorderPillButton
 import com.example.ui.components.formatNumber
-import com.example.ui.theme.HairlineGrey
-import com.example.ui.theme.PureBlack
-import com.example.ui.theme.PureWhite
-import com.example.ui.theme.SubtextGrey
+import com.example.ui.theme.AppThemeColors
+import com.example.ui.theme.appOutlinedTextFieldColors
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -68,6 +65,7 @@ fun HistoryScreen(
     onEditDayCount: (dateKey: String, newCount: Long) -> Unit,
     onOpenMessagesHistory: () -> Unit = {}
 ) {
+    val palette = AppThemeColors.palette
     var editingDateKey by remember { mutableStateOf<String?>(null) }
     var editingInitialCount by remember { mutableStateOf(0L) }
     var showAddDateDialog by remember { mutableStateOf(false) }
@@ -90,12 +88,12 @@ fun HistoryScreen(
                 Text(
                     text = "History",
                     style = MaterialTheme.typography.headlineLarge,
-                    color = PureBlack
+                    color = palette.onCanvas
                 )
                 Text(
                     text = "Daily record · Edit anytime",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = SubtextGrey
+                    color = palette.onCanvasSubtext
                 )
             }
 
@@ -126,11 +124,11 @@ fun HistoryScreen(
 
             if (sortedDays.isEmpty()) {
                 Surface(
-                    color = PureWhite,
+                    color = palette.cardSurface,
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, HairlineGrey, RoundedCornerShape(16.dp))
+                        .border(1.dp, palette.hairline, RoundedCornerShape(16.dp))
                 ) {
                     Column(
                         modifier = Modifier.padding(24.dp),
@@ -139,23 +137,23 @@ fun HistoryScreen(
                         Text(
                             text = "No counts saved yet",
                             style = MaterialTheme.typography.titleMedium,
-                            color = PureBlack
+                            color = palette.onCard
                         )
                         Text(
                             text = "Tap on the Counter or use 'Log Date' to record earlier days.",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = SubtextGrey
+                            color = palette.onCardSubtext
                         )
                     }
                 }
             } else {
                 Surface(
-                    color = PureWhite,
+                    color = palette.cardSurface,
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
-                        .border(1.dp, HairlineGrey, RoundedCornerShape(16.dp))
+                        .border(1.dp, palette.hairline, RoundedCornerShape(16.dp))
                 ) {
                     LazyColumn(
                         contentPadding = PaddingValues(vertical = 8.dp),
@@ -171,7 +169,7 @@ fun HistoryScreen(
                                     editingInitialCount = day.count
                                 }
                             )
-                            HorizontalDivider(color = HairlineGrey, thickness = 1.dp)
+                            HorizontalDivider(color = palette.hairline, thickness = 1.dp)
                         }
                     }
                 }
@@ -236,13 +234,13 @@ fun HistoryScreen(
     if (reduction != null) {
         AlertDialog(
             onDismissRequest = { pendingReduction = null },
-            containerColor = PureWhite,
+            containerColor = palette.cardSurface,
             shape = RoundedCornerShape(16.dp),
             title = {
                 Text(
                     text = "Confirm Reduction",
                     style = MaterialTheme.typography.titleLarge,
-                    color = PureBlack,
+                    color = palette.onCard,
                     fontWeight = FontWeight.SemiBold
                 )
             },
@@ -250,7 +248,7 @@ fun HistoryScreen(
                 Text(
                     text = "Are you sure? This will reduce your total from ${formatNumber(reduction.oldTotal)} to ${formatNumber(reduction.newTotal)}",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = PureBlack
+                    color = palette.onCard
                 )
             },
             confirmButton = {
@@ -259,7 +257,7 @@ fun HistoryScreen(
                         onClick = { pendingReduction = null },
                         modifier = Modifier.testTag("cancel_reduce_day_button")
                     ) {
-                        Text("Cancel", color = SubtextGrey)
+                        Text("Cancel", color = palette.onCardSubtext)
                     }
                     BlackPillButton(
                         text = "Yes, reduce",
@@ -284,6 +282,7 @@ private fun HistoryRow(
     dailyTarget: Int,
     onEdit: () -> Unit
 ) {
+    val palette = AppThemeColors.palette
     val dateLabel = formatDateLabel(day.dateKey, today)
     val targetMet = day.count >= dailyTarget.toLong()
     Row(
@@ -300,7 +299,7 @@ private fun HistoryRow(
             Text(
                 text = dateLabel,
                 style = MaterialTheme.typography.titleMedium,
-                color = PureBlack,
+                color = palette.onCard,
                 fontWeight = FontWeight.Medium
             )
             Text(
@@ -309,14 +308,14 @@ private fun HistoryRow(
                     if (day.pendingSync) append(" · Pending sync")
                 },
                 style = MaterialTheme.typography.labelMedium,
-                color = SubtextGrey
+                color = palette.onCardSubtext
             )
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = formatNumber(day.count),
                 style = MaterialTheme.typography.titleLarge,
-                color = PureBlack,
+                color = palette.onCard,
                 fontWeight = FontWeight.Bold
             )
             IconButton(
@@ -328,7 +327,7 @@ private fun HistoryRow(
                 Icon(
                     imageVector = Icons.Outlined.Edit,
                     contentDescription = "Edit count for ${day.dateKey}",
-                    tint = PureBlack
+                    tint = palette.onCard
                 )
             }
         }
@@ -343,18 +342,19 @@ private fun EditDayCountDialog(
     onDismiss: () -> Unit,
     onSave: (Long) -> Unit
 ) {
+    val palette = AppThemeColors.palette
     var input by remember(dateKey) { mutableStateOf(currentCount.toString()) }
     val parsed = input.toLongOrNull()?.takeIf { it in 0L..100_000_000L }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = PureWhite,
+        containerColor = palette.cardSurface,
         shape = RoundedCornerShape(16.dp),
         title = {
             Text(
                 text = "Edit ${formatDateLabel(dateKey, today)}",
                 style = MaterialTheme.typography.titleLarge,
-                color = PureBlack
+                color = palette.onCard
             )
         },
         text = {
@@ -367,12 +367,7 @@ private fun EditDayCountDialog(
                     label = { Text("Durood Count") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PureBlack,
-                        unfocusedBorderColor = HairlineGrey,
-                        focusedLabelColor = PureBlack,
-                        cursorColor = PureBlack
-                    ),
+                    colors = appOutlinedTextFieldColors(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("edit_day_count_input")
@@ -382,7 +377,7 @@ private fun EditDayCountDialog(
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = onDismiss) {
-                    Text("Cancel", color = SubtextGrey)
+                    Text("Cancel", color = palette.onCardSubtext)
                 }
                 BlackPillButton(
                     text = "Save",
@@ -405,6 +400,7 @@ private fun AddPastDateDialog(
     onDismiss: () -> Unit,
     onSave: (String, Long) -> Unit
 ) {
+    val palette = AppThemeColors.palette
     var dateInput by remember(today) { mutableStateOf(today.minusDays(1).toString()) }
     var countInput by remember { mutableStateOf("") }
     val validDate = try {
@@ -417,13 +413,13 @@ private fun AddPastDateDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = PureWhite,
+        containerColor = palette.cardSurface,
         shape = RoundedCornerShape(16.dp),
         title = {
             Text(
                 text = "Log Past Date",
                 style = MaterialTheme.typography.titleLarge,
-                color = PureBlack
+                color = palette.onCard
             )
         },
         text = {
@@ -433,12 +429,7 @@ private fun AddPastDateDialog(
                     onValueChange = { dateInput = it.take(10) },
                     label = { Text("Date (YYYY-MM-DD)") },
                     singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PureBlack,
-                        unfocusedBorderColor = HairlineGrey,
-                        focusedLabelColor = PureBlack,
-                        cursorColor = PureBlack
-                    ),
+                    colors = appOutlinedTextFieldColors(),
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
@@ -450,12 +441,7 @@ private fun AddPastDateDialog(
                     },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PureBlack,
-                        unfocusedBorderColor = HairlineGrey,
-                        focusedLabelColor = PureBlack,
-                        cursorColor = PureBlack
-                    ),
+                    colors = appOutlinedTextFieldColors(),
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -463,7 +449,7 @@ private fun AddPastDateDialog(
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = onDismiss) {
-                    Text("Cancel", color = SubtextGrey)
+                    Text("Cancel", color = palette.onCardSubtext)
                 }
                 BlackPillButton(
                     text = "Save",

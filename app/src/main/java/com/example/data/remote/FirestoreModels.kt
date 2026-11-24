@@ -17,6 +17,7 @@ data class FirestoreUserProfile(
     val reminder2Hour: Long = 21L,
     val reminder2Minute: Long = 0L,
     val remindersEnabled: Boolean = true,
+    val themeMode: String = "bw",
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 )

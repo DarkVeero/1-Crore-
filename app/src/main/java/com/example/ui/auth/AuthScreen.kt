@@ -45,7 +45,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -81,12 +80,8 @@ import com.example.ui.components.FaintGridBackground
 import com.example.ui.components.WhiteBorderPillButton
 import com.example.ui.components.formatNumber
 import com.example.ui.components.rememberReduceMotion
-import com.example.ui.theme.ErrorRed
-import com.example.ui.theme.HairlineGrey
-import com.example.ui.theme.OffWhite
-import com.example.ui.theme.PureBlack
-import com.example.ui.theme.PureWhite
-import com.example.ui.theme.SubtextGrey
+import com.example.ui.theme.AppThemeColors
+import com.example.ui.theme.appOutlinedTextFieldColors
 import com.google.firebase.Firebase
 import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.auth.EmailAuthProvider
@@ -198,6 +193,7 @@ fun AuthScreen(
     val scope = rememberCoroutineScope()
     val credentialManager = remember(context) { CredentialManager.create(context) }
     val isOnline by NetworkMonitor.observeOnline(context).collectAsStateWithLifecycle(initialValue = true)
+    val palette = AppThemeColors.palette
 
     var mode by remember { mutableStateOf(AuthMode.LOGIN) }
     var fullName by remember { mutableStateOf("") }
@@ -241,11 +237,11 @@ fun AuthScreen(
             AuthHeader(reduceMotion = reduceMotion)
 
             Surface(
-                color = PureWhite,
+                color = palette.cardSurface,
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, HairlineGrey, RoundedCornerShape(16.dp))
+                    .border(1.dp, palette.hairline, RoundedCornerShape(16.dp))
             ) {
                 Column(
                     modifier = Modifier.padding(22.dp),
@@ -254,7 +250,7 @@ fun AuthScreen(
                     Text(
                         text = if (mode == AuthMode.LOGIN) "Login" else "Create Account",
                         style = MaterialTheme.typography.headlineMedium,
-                        color = PureBlack,
+                        color = palette.onCard,
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
@@ -264,21 +260,21 @@ fun AuthScreen(
                             "Create your account — email verification is required."
                         },
                         style = MaterialTheme.typography.bodyMedium,
-                        color = SubtextGrey
+                        color = palette.onCardSubtext
                     )
 
                     if (!isOnline) {
                         Surface(
-                            color = OffWhite,
+                            color = palette.subtleSurface,
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .border(1.dp, HairlineGrey, RoundedCornerShape(8.dp))
+                                .border(1.dp, palette.hairline, RoundedCornerShape(8.dp))
                         ) {
                             Text(
                                 text = "You are offline. Internet is required to sign in or create an account. Once signed in, the app works fully offline.",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = PureBlack,
+                                color = palette.onCard,
                                 modifier = Modifier.padding(12.dp)
                             )
                         }
@@ -286,16 +282,16 @@ fun AuthScreen(
 
                     if (errorMessage != null) {
                         Surface(
-                            color = OffWhite,
+                            color = palette.subtleSurface,
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .border(1.dp, PureBlack, RoundedCornerShape(8.dp))
+                                .border(1.dp, palette.error, RoundedCornerShape(8.dp))
                         ) {
                             Text(
                                 text = errorMessage.orEmpty(),
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = PureBlack,
+                                color = palette.onCard,
                                 modifier = Modifier.padding(12.dp)
                             )
                         }
@@ -303,16 +299,16 @@ fun AuthScreen(
 
                     if (infoMessage != null) {
                         Surface(
-                            color = OffWhite,
+                            color = palette.subtleSurface,
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .border(1.dp, HairlineGrey, RoundedCornerShape(8.dp))
+                                .border(1.dp, palette.hairline, RoundedCornerShape(8.dp))
                         ) {
                             Text(
                                 text = infoMessage.orEmpty(),
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = PureBlack,
+                                color = palette.onCard,
                                 modifier = Modifier.padding(12.dp)
                             )
                         }
@@ -350,12 +346,12 @@ fun AuthScreen(
                         },
                         enabled = !isAnyAuthLoading,
                         shape = RoundedCornerShape(999.dp),
-                        border = BorderStroke(1.dp, if (!isAnyAuthLoading) PureBlack else HairlineGrey),
+                        border = BorderStroke(1.dp, if (!isAnyAuthLoading) palette.strongBorder else palette.hairline),
                         colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = PureWhite,
-                            contentColor = PureBlack,
-                            disabledContainerColor = PureWhite,
-                            disabledContentColor = if (isGoogleLoading) PureBlack else SubtextGrey
+                            containerColor = palette.cardSurface,
+                            contentColor = palette.onCard,
+                            disabledContainerColor = palette.cardSurface,
+                            disabledContentColor = if (isGoogleLoading) palette.onCard else palette.onCardSubtext
                         ),
                         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp),
                         modifier = Modifier
@@ -365,7 +361,7 @@ fun AuthScreen(
                     ) {
                         if (isGoogleLoading) {
                             CircularProgressIndicator(
-                                color = PureBlack,
+                                color = palette.accent,
                                 strokeWidth = 2.dp,
                                 modifier = Modifier
                                     .size(18.dp)
@@ -376,7 +372,7 @@ fun AuthScreen(
                                 text = "Signing in...",
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Medium,
-                                color = PureBlack
+                                color = palette.onCard
                             )
                         } else {
                             Text(
@@ -392,13 +388,13 @@ fun AuthScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        HorizontalDivider(color = HairlineGrey, modifier = Modifier.weight(1f))
+                        HorizontalDivider(color = palette.hairline, modifier = Modifier.weight(1f))
                         Text(
                             text = "OR",
                             style = MaterialTheme.typography.labelSmall,
-                            color = SubtextGrey
+                            color = palette.onCardSubtext
                         )
-                        HorizontalDivider(color = HairlineGrey, modifier = Modifier.weight(1f))
+                        HorizontalDivider(color = palette.hairline, modifier = Modifier.weight(1f))
                     }
 
                     if (mode == AuthMode.SIGNUP) {
@@ -461,7 +457,7 @@ fun AuthScreen(
                                 Icon(
                                     imageVector = if (passwordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
                                     contentDescription = if (passwordVisible) "Hide password" else "Show password",
-                                    tint = SubtextGrey
+                                    tint = palette.onCardSubtext
                                 )
                             }
                         },
@@ -501,7 +497,7 @@ fun AuthScreen(
                             Text(
                                 text = "Forgot password?",
                                 style = MaterialTheme.typography.labelLarge,
-                                color = PureBlack,
+                                color = palette.accent,
                                 modifier = Modifier
                                     .clickable {
                                         errorMessage = null
@@ -521,7 +517,7 @@ fun AuthScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             CircularProgressIndicator(
-                                color = PureBlack,
+                                color = palette.accent,
                                 strokeWidth = 2.dp,
                                 modifier = Modifier.size(24.dp)
                             )
@@ -606,12 +602,12 @@ fun AuthScreen(
                         Text(
                             text = if (mode == AuthMode.LOGIN) "Don't have an account? " else "Already have an account? ",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = SubtextGrey
+                            color = palette.onCardSubtext
                         )
                         Text(
                             text = if (mode == AuthMode.LOGIN) "Sign up" else "Login",
                             style = MaterialTheme.typography.labelLarge,
-                            color = PureBlack,
+                            color = palette.accent,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier
                                 .clickable {
@@ -633,7 +629,7 @@ fun AuthScreen(
             Text(
                 text = "Offline-first · Cloud synced · Zero distraction",
                 style = MaterialTheme.typography.labelMedium,
-                color = SubtextGrey
+                color = palette.onCanvasSubtext
             )
         }
     }
@@ -654,6 +650,7 @@ fun AuthScreen(
 internal fun AuthHeader(
     reduceMotion: Boolean
 ) {
+    val palette = AppThemeColors.palette
     var hasPlayedGoalCountUp by rememberSaveable { mutableStateOf(false) }
     val goalProgress = remember {
         Animatable(if (reduceMotion || hasPlayedGoalCountUp) 1f else 0f)
@@ -681,13 +678,13 @@ internal fun AuthHeader(
         Text(
             text = "DUROOD PAK COUNTER",
             style = MaterialTheme.typography.labelMedium,
-            color = SubtextGrey
+            color = palette.onCanvasSubtext
         )
         Spacer(modifier = Modifier.height(10.dp))
         Text(
             text = "1 Crore",
             style = MaterialTheme.typography.displayLarge,
-            color = PureBlack
+            color = palette.onCanvas
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
@@ -695,7 +692,7 @@ internal fun AuthHeader(
             style = MaterialTheme.typography.headlineMedium.copy(
                 fontFeatureSettings = "tnum"
             ),
-            color = SubtextGrey,
+            color = palette.onCanvasSubtext,
             modifier = Modifier.testTag("auth_goal_count_text")
         )
     }
@@ -713,6 +710,7 @@ private fun AuthTextField(
     visualTransformation: VisualTransformation = VisualTransformation.None,
     trailingIcon: (@Composable () -> Unit)? = null
 ) {
+    val palette = AppThemeColors.palette
     Column(modifier = Modifier.fillMaxWidth()) {
         OutlinedTextField(
             value = value,
@@ -723,7 +721,7 @@ private fun AuthTextField(
             visualTransformation = visualTransformation,
             trailingIcon = trailingIcon,
             keyboardOptions = keyboardOptions,
-            colors = monochromeTextFieldColors(),
+            colors = appOutlinedTextFieldColors(),
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag(inputTestTag)
@@ -732,7 +730,7 @@ private fun AuthTextField(
             Text(
                 text = errorText,
                 style = MaterialTheme.typography.labelMedium,
-                color = ErrorRed,
+                color = palette.error,
                 modifier = Modifier
                     .padding(start = 12.dp, top = 4.dp)
                     .testTag(errorTestTag)
@@ -753,6 +751,7 @@ fun VerifyEmailScreen(
     val scope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
     val reduceMotion = rememberReduceMotion()
+    val palette = AppThemeColors.palette
 
     var isResending by remember { mutableStateOf(false) }
     var isApplyingLink by remember { mutableStateOf(false) }
@@ -877,11 +876,11 @@ fun VerifyEmailScreen(
             verticalArrangement = Arrangement.Center
         ) {
             Surface(
-                color = PureWhite,
+                color = palette.cardSurface,
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, HairlineGrey, RoundedCornerShape(16.dp))
+                    .border(1.dp, palette.hairline, RoundedCornerShape(16.dp))
             ) {
                 Column(
                     modifier = Modifier.padding(24.dp),
@@ -890,18 +889,18 @@ fun VerifyEmailScreen(
                     Text(
                         text = "VERIFY YOUR EMAIL",
                         style = MaterialTheme.typography.labelMedium,
-                        color = SubtextGrey
+                        color = palette.onCardSubtext
                     )
                     Text(
                         text = "Check your email",
                         style = MaterialTheme.typography.headlineMedium,
-                        color = PureBlack,
+                        color = palette.onCard,
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
                         text = "Check your email — we sent a verification link to $email\n\nAlso check your spam folder.",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = SubtextGrey
+                        color = palette.onCardSubtext
                     )
 
                     WaitingDotsRow(
@@ -911,16 +910,16 @@ fun VerifyEmailScreen(
 
                     if (statusMessage != null) {
                         Surface(
-                            color = OffWhite,
+                            color = palette.subtleSurface,
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .border(1.dp, PureBlack, RoundedCornerShape(8.dp))
+                                .border(1.dp, palette.strongBorder, RoundedCornerShape(8.dp))
                         ) {
                             Text(
                                 text = statusMessage.orEmpty(),
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = PureBlack,
+                                color = palette.onCard,
                                 modifier = Modifier.padding(12.dp)
                             )
                         }
@@ -966,7 +965,7 @@ fun VerifyEmailScreen(
                         Text(
                             text = "Sent",
                             style = MaterialTheme.typography.labelMedium,
-                            color = PureBlack,
+                            color = palette.accent,
                             fontWeight = FontWeight.Medium,
                             modifier = Modifier
                                 .align(Alignment.CenterHorizontally)
@@ -984,7 +983,7 @@ fun VerifyEmailScreen(
                         ) {
                             Text(
                                 text = "Use a different account",
-                                color = SubtextGrey
+                                color = palette.onCardSubtext
                             )
                         }
                     }
@@ -999,6 +998,7 @@ private fun WaitingDotsRow(
     label: String,
     reduceMotion: Boolean
 ) {
+    val palette = AppThemeColors.palette
     val phase = if (reduceMotion) {
         0f
     } else {
@@ -1034,14 +1034,14 @@ private fun WaitingDotsRow(
                     modifier = Modifier
                         .size(7.dp)
                         .alpha(dotAlpha)
-                        .background(PureBlack, CircleShape)
+                        .background(palette.accent, CircleShape)
                 )
             }
         }
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium,
-            color = SubtextGrey
+            color = palette.onCardSubtext
         )
     }
 }
@@ -1053,6 +1053,7 @@ fun LinkPasswordScreen(
     onSkip: () -> Unit,
     onSignOut: () -> Unit
 ) {
+    val palette = AppThemeColors.palette
     val scope = rememberCoroutineScope()
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
@@ -1074,11 +1075,11 @@ fun LinkPasswordScreen(
             verticalArrangement = Arrangement.Center
         ) {
             Surface(
-                color = PureWhite,
+                color = palette.cardSurface,
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, HairlineGrey, RoundedCornerShape(16.dp))
+                    .border(1.dp, palette.hairline, RoundedCornerShape(16.dp))
             ) {
                 Column(
                     modifier = Modifier.padding(24.dp),
@@ -1087,32 +1088,32 @@ fun LinkPasswordScreen(
                     Text(
                         text = "ACCOUNT RECOVERY",
                         style = MaterialTheme.typography.labelMedium,
-                        color = SubtextGrey
+                        color = palette.onCardSubtext
                     )
                     Text(
                         text = "Set a backup password",
                         style = MaterialTheme.typography.headlineMedium,
-                        color = PureBlack,
+                        color = palette.onCard,
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
                         text = "You signed in with Google ($email). Set a permanent password linked to this same account so you can recover everything using email and password if you ever lose access to your Google account.",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = SubtextGrey
+                        color = palette.onCardSubtext
                     )
 
                     if (errorMessage != null) {
                         Surface(
-                            color = OffWhite,
+                            color = palette.subtleSurface,
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .border(1.dp, PureBlack, RoundedCornerShape(8.dp))
+                                .border(1.dp, palette.error, RoundedCornerShape(8.dp))
                         ) {
                             Text(
                                 text = errorMessage.orEmpty(),
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = PureBlack,
+                                color = palette.onCard,
                                 modifier = Modifier.padding(12.dp)
                             )
                         }
@@ -1132,7 +1133,7 @@ fun LinkPasswordScreen(
                                 Icon(
                                     imageVector = if (passwordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
                                     contentDescription = if (passwordVisible) "Hide password" else "Show password",
-                                    tint = SubtextGrey
+                                    tint = palette.onCardSubtext
                                 )
                             }
                         },
@@ -1140,7 +1141,7 @@ fun LinkPasswordScreen(
                             keyboardType = KeyboardType.Password,
                             imeAction = ImeAction.Next
                         ),
-                        colors = monochromeTextFieldColors(),
+                        colors = appOutlinedTextFieldColors(),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("link_password_input")
@@ -1159,7 +1160,7 @@ fun LinkPasswordScreen(
                             keyboardType = KeyboardType.Password,
                             imeAction = ImeAction.Done
                         ),
-                        colors = monochromeTextFieldColors(),
+                        colors = appOutlinedTextFieldColors(),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("link_password_confirm_input")
@@ -1226,6 +1227,7 @@ private fun ForgotPasswordDialog(
     onDismiss: () -> Unit,
     onSent: (String) -> Unit
 ) {
+    val palette = AppThemeColors.palette
     val scope = rememberCoroutineScope()
     var resetEmail by remember { mutableStateOf(initialEmail) }
     var isSending by remember { mutableStateOf(false) }
@@ -1233,13 +1235,13 @@ private fun ForgotPasswordDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = PureWhite,
+        containerColor = palette.cardSurface,
         shape = RoundedCornerShape(16.dp),
         title = {
             Text(
                 text = "Reset Password",
                 style = MaterialTheme.typography.titleLarge,
-                color = PureBlack
+                color = palette.onCard
             )
         },
         text = {
@@ -1247,7 +1249,7 @@ private fun ForgotPasswordDialog(
                 Text(
                     text = "Enter your account email and we will send a password reset link.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = SubtextGrey
+                    color = palette.onCardSubtext
                 )
                 OutlinedTextField(
                     value = resetEmail,
@@ -1258,7 +1260,7 @@ private fun ForgotPasswordDialog(
                     label = { Text("Email") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                    colors = monochromeTextFieldColors(),
+                    colors = appOutlinedTextFieldColors(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("forgot_password_email_input")
@@ -1267,7 +1269,7 @@ private fun ForgotPasswordDialog(
                     Text(
                         text = dialogError.orEmpty(),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = PureBlack,
+                        color = palette.error,
                         fontWeight = FontWeight.Medium
                     )
                 }
@@ -1276,7 +1278,7 @@ private fun ForgotPasswordDialog(
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = onDismiss, enabled = !isSending) {
-                    Text("Cancel", color = SubtextGrey)
+                    Text("Cancel", color = palette.onCardSubtext)
                 }
                 BlackPillButton(
                     text = if (isSending) "Sending..." else "Send Link",
@@ -1306,20 +1308,6 @@ private fun ForgotPasswordDialog(
         }
     )
 }
-
-@Composable
-private fun monochromeTextFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedBorderColor = PureBlack,
-    unfocusedBorderColor = HairlineGrey,
-    focusedLabelColor = PureBlack,
-    unfocusedLabelColor = SubtextGrey,
-    cursorColor = PureBlack,
-    errorBorderColor = ErrorRed,
-    errorLabelColor = ErrorRed,
-    errorSupportingTextColor = ErrorRed,
-    errorCursorColor = PureBlack,
-    errorTrailingIconColor = SubtextGrey
-)
 
 fun mapFirebaseAuthError(error: Exception): String {
     return when (error) {

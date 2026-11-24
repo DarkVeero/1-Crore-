@@ -38,10 +38,7 @@ import com.example.announcements.AnnouncementItem
 import com.example.ui.components.BlackPillButton
 import com.example.ui.components.FaintGridBackground
 import com.example.ui.components.buildLinkifiedAnnouncementBody
-import com.example.ui.theme.HairlineGrey
-import com.example.ui.theme.PureBlack
-import com.example.ui.theme.PureWhite
-import com.example.ui.theme.SubtextGrey
+import com.example.ui.theme.AppThemeColors
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -53,6 +50,7 @@ fun MessagesHistoryScreen(
     onActionClick: (AnnouncementItem) -> Unit
 ) {
     BackHandler(onBack = onBack)
+    val palette = AppThemeColors.palette
 
     Box(modifier = Modifier.fillMaxSize()) {
         FaintGridBackground()
@@ -79,19 +77,19 @@ fun MessagesHistoryScreen(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
-                        tint = PureBlack
+                        tint = palette.onCanvas
                     )
                 }
                 Text(
                     text = "Messages History",
                     style = MaterialTheme.typography.headlineMedium,
-                    color = PureBlack,
+                    color = palette.onCanvas,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.testTag("messages_history_title")
                 )
             }
 
-            HorizontalDivider(color = HairlineGrey, thickness = 1.dp)
+            HorizontalDivider(color = palette.hairline, thickness = 1.dp)
 
             if (entries.isEmpty()) {
                 Box(
@@ -101,11 +99,11 @@ fun MessagesHistoryScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Surface(
-                        color = PureWhite,
+                        color = palette.cardSurface,
                         shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .border(1.dp, HairlineGrey, RoundedCornerShape(16.dp))
+                            .border(1.dp, palette.hairline, RoundedCornerShape(16.dp))
                             .testTag("messages_history_empty")
                     ) {
                         Column(
@@ -116,13 +114,13 @@ fun MessagesHistoryScreen(
                             Text(
                                 text = "No messages yet",
                                 style = MaterialTheme.typography.titleMedium,
-                                color = PureBlack,
+                                color = palette.onCard,
                                 fontWeight = FontWeight.SemiBold
                             )
                             Text(
                                 text = "Community updates, milestone celebrations, and dismissed announcements will appear here.",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = SubtextGrey
+                                color = palette.onCardSubtext
                             )
                         }
                     }
@@ -155,20 +153,21 @@ private fun AnnouncementHistoryCard(
     entry: AnnouncementHistoryEntry,
     onActionClick: (AnnouncementItem) -> Unit
 ) {
+    val palette = AppThemeColors.palette
     val item = entry.announcement
     val formattedDate = remember(entry.recordedAtMillis) {
         formatHistoryTimestamp(entry.recordedAtMillis)
     }
-    val linkifiedBody = remember(item.body) {
-        buildLinkifiedAnnouncementBody(item.body)
+    val linkifiedBody = remember(item.body, palette.accent) {
+        buildLinkifiedAnnouncementBody(item.body, linkColor = palette.accent)
     }
 
     Surface(
-        color = PureWhite,
+        color = palette.cardSurface,
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, HairlineGrey, RoundedCornerShape(16.dp))
+            .border(1.dp, palette.hairline, RoundedCornerShape(16.dp))
             .testTag("messages_history_card_${item.id}")
     ) {
         Column(
@@ -185,7 +184,7 @@ private fun AnnouncementHistoryCard(
                 ) {
                     if (item.isUrgent) {
                         Surface(
-                            color = PureBlack,
+                            color = palette.accent,
                             shape = RoundedCornerShape(999.dp),
                             modifier = Modifier
                                 .semantics(mergeDescendants = true) {}
@@ -194,7 +193,7 @@ private fun AnnouncementHistoryCard(
                             Text(
                                 text = "URGENT",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = PureWhite,
+                                color = palette.onAccent,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
                                 softWrap = false,
@@ -206,7 +205,7 @@ private fun AnnouncementHistoryCard(
                         Text(
                             text = formattedDate,
                             style = MaterialTheme.typography.labelMedium,
-                            color = SubtextGrey,
+                            color = palette.onCardSubtext,
                             modifier = Modifier.testTag("messages_history_date_${item.id}")
                         )
                     }
@@ -217,7 +216,7 @@ private fun AnnouncementHistoryCard(
                 Text(
                     text = item.title,
                     style = MaterialTheme.typography.titleMedium,
-                    color = PureBlack,
+                    color = palette.onCard,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.testTag("messages_history_item_title_${item.id}")
                 )
@@ -227,7 +226,7 @@ private fun AnnouncementHistoryCard(
                 Text(
                     text = linkifiedBody,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = PureBlack,
+                    color = palette.onCard,
                     modifier = Modifier.testTag("messages_history_item_body_${item.id}")
                 )
             }

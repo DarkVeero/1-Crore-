@@ -11,16 +11,18 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 object NetworkMonitor {
-    private fun hasValidatedInternet(caps: NetworkCapabilities?): Boolean {
+    // FIX: INTERNET capability only — do NOT require VALIDATED. A working
+    // connection often has INTERNET but is not yet VALIDATED; gating on
+    // VALIDATED made the app report "offline" and never sync.
+    private fun hasInternet(caps: NetworkCapabilities?): Boolean {
         if (caps == null) return false
-        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 
     private fun isActiveNetworkOnline(cm: ConnectivityManager): Boolean {
         val network = cm.activeNetwork ?: return false
         val caps = cm.getNetworkCapabilities(network) ?: return false
-        return hasValidatedInternet(caps)
+        return hasInternet(caps)
     }
 
     fun isCurrentlyOnline(context: Context): Boolean {
@@ -66,7 +68,7 @@ object NetworkMonitor {
             override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
                 val active = cm.activeNetwork
                 val online = if (active == null || active == network) {
-                    hasValidatedInternet(networkCapabilities)
+                    hasInternet(networkCapabilities)
                 } else {
                     isActiveNetworkOnline(cm)
                 }

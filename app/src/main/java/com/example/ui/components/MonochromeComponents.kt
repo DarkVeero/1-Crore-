@@ -47,6 +47,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,13 +66,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.example.ui.theme.FaintGridGrey
-import com.example.ui.theme.HairlineGrey
-import com.example.ui.theme.OffWhite
-import com.example.ui.theme.PureBlack
-import com.example.ui.theme.PureWhite
-import com.example.ui.theme.SubtextGrey
-import com.example.ui.theme.TrackGrey
+import com.example.ui.theme.AppThemeColors
+import com.example.ui.theme.AppThemeMode
+import com.example.ui.theme.CharcoalDivider
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -135,7 +132,6 @@ private data class CachedGridCell(
 
 internal const val FAINT_GRID_SETTLE_DURATION_MS = 4_000
 internal const val FAINT_GRID_OSCILLATION_AMPLITUDE_DP = 7f
-private val CLEANER_GRID_HAIRLINE_COLOR = Color(0xFFF5F5F5)
 
 @Composable
 fun FaintGridBackground(
@@ -148,6 +144,11 @@ fun FaintGridBackground(
     maxSquareAlphaDelta: Float = 0.012f
 ) {
     val context = LocalContext.current
+    val palette = AppThemeColors.palette
+    val canvasBgState = rememberUpdatedState(palette.canvasBackground)
+    val cellInkState = rememberUpdatedState(palette.onCanvas)
+    val gridHairlineState = rememberUpdatedState(palette.canvasGridHairline)
+
     val isLowRam = remember(context) { isLowEndOrLowRamDevice(context) }
     val staticMode = reduceMotion || isLowRam
     val cycleHalfMs = (minOf(FAINT_GRID_SETTLE_DURATION_MS, driftDurationMs, pulseDurationMs) / 2)
@@ -198,7 +199,10 @@ fun FaintGridBackground(
                 }
 
                 onDrawBehind {
-                    drawRect(color = PureWhite)
+                    val canvasBg = canvasBgState.value
+                    val cellInk = cellInkState.value
+                    val gridLineColor = gridHairlineState.value
+                    drawRect(color = canvasBg)
                     // Read infinite animation value inside draw phase ONLY (zero recompositions)
                     val fraction = if (staticMode) 0f else (oscillationFractionState?.value ?: 0f)
                     val offsetYPx = fraction * amplitudePx
@@ -212,7 +216,7 @@ fun FaintGridBackground(
                         val top = cell.row * stepPx + offsetYPx
                         if (top + cellSide >= 0f && top <= size.height) {
                             drawRect(
-                                color = PureBlack.copy(alpha = alpha),
+                                color = cellInk.copy(alpha = alpha),
                                 topLeft = Offset(left + 1f, top + 1f),
                                 size = cellSize
                             )
@@ -222,7 +226,7 @@ fun FaintGridBackground(
                     var x = 0f
                     while (x <= size.width) {
                         drawLine(
-                            color = CLEANER_GRID_HAIRLINE_COLOR,
+                            color = gridLineColor,
                             start = Offset(x, 0f),
                             end = Offset(x, size.height),
                             strokeWidth = 1f
@@ -233,7 +237,7 @@ fun FaintGridBackground(
                     while (y <= size.height + stepPx) {
                         if (y >= 0f && y <= size.height) {
                             drawLine(
-                                color = CLEANER_GRID_HAIRLINE_COLOR,
+                                color = gridLineColor,
                                 start = Offset(0f, y),
                                 end = Offset(size.width, y),
                                 strokeWidth = 1f
@@ -256,6 +260,7 @@ fun BlackPillButton(
     contentPadding: PaddingValues = PaddingValues(horizontal = 24.dp, vertical = 14.dp),
     maxLines: Int = Int.MAX_VALUE
 ) {
+    val palette = AppThemeColors.palette
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
@@ -270,10 +275,10 @@ fun BlackPillButton(
         interactionSource = interactionSource,
         shape = RoundedCornerShape(999.dp),
         colors = ButtonDefaults.buttonColors(
-            containerColor = PureBlack,
-            contentColor = PureWhite,
-            disabledContainerColor = HairlineGrey,
-            disabledContentColor = SubtextGrey
+            containerColor = palette.accent,
+            contentColor = palette.onAccent,
+            disabledContainerColor = palette.hairline,
+            disabledContentColor = palette.onCardSubtext
         ),
         elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp),
         contentPadding = contentPadding,
@@ -304,6 +309,7 @@ fun WhiteBorderPillButton(
     contentPadding: PaddingValues = PaddingValues(horizontal = 20.dp, vertical = 14.dp),
     maxLines: Int = Int.MAX_VALUE
 ) {
+    val palette = AppThemeColors.palette
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
@@ -317,11 +323,11 @@ fun WhiteBorderPillButton(
         enabled = enabled,
         interactionSource = interactionSource,
         shape = RoundedCornerShape(999.dp),
-        border = BorderStroke(1.dp, if (enabled) PureBlack else HairlineGrey),
+        border = BorderStroke(1.dp, if (enabled) palette.strongBorder else palette.hairline),
         colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = PureWhite,
-            contentColor = PureBlack,
-            disabledContentColor = SubtextGrey
+            containerColor = palette.cardSurface,
+            contentColor = palette.onCard,
+            disabledContentColor = palette.onCardSubtext
         ),
         contentPadding = contentPadding,
         modifier = modifier
@@ -397,6 +403,7 @@ fun OfflineSyncBadge(
     pendingSyncDuroodCount: Long = 0L,
     pendingSyncDaysCount: Int = 0
 ) {
+    val palette = AppThemeColors.palette
     val label = formatOfflineSyncBadgeLabel(
         isOnline = isOnline,
         hasPendingSync = hasPendingSync,
@@ -411,8 +418,8 @@ fun OfflineSyncBadge(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
         modifier = modifier
-            .background(OffWhite, RoundedCornerShape(999.dp))
-            .border(1.dp, HairlineGrey, RoundedCornerShape(999.dp))
+            .background(palette.subtleSurface, RoundedCornerShape(999.dp))
+            .border(1.dp, palette.hairline, RoundedCornerShape(999.dp))
             .padding(horizontal = 12.dp, vertical = 6.dp)
             .semantics(mergeDescendants = true) {}
             .testTag("offline_sync_badge")
@@ -420,14 +427,14 @@ fun OfflineSyncBadge(
         Box(
             modifier = Modifier
                 .size(7.dp)
-                .background(if (isFilledDot) PureBlack else PureWhite, CircleShape)
-                .border(1.dp, PureBlack, CircleShape)
+                .background(if (isFilledDot) palette.accent else palette.cardSurface, CircleShape)
+                .border(1.dp, if (isFilledDot) palette.accent else palette.strongBorder, CircleShape)
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium,
-            color = if (!isOnline || hasPendingSync) PureBlack else SubtextGrey
+            color = if (!isOnline || hasPendingSync) palette.onCard else palette.onCardSubtext
         )
     }
 }
@@ -437,14 +444,15 @@ fun RollingNumberText(
     value: Long,
     style: TextStyle,
     modifier: Modifier = Modifier,
-    reduceMotion: Boolean = rememberReduceMotion()
+    reduceMotion: Boolean = rememberReduceMotion(),
+    color: Color = AppThemeColors.palette.onCanvas
 ) {
     val formatted = formatNumber(value)
     if (reduceMotion) {
         Text(
             text = formatted,
             style = style,
-            color = PureBlack,
+            color = color,
             modifier = modifier
         )
         return
@@ -475,14 +483,14 @@ fun RollingNumberText(
                         Text(
                             text = digit.toString(),
                             style = style,
-                            color = PureBlack
+                            color = color
                         )
                     }
                 } else {
                     Text(
                         text = ch.toString(),
                         style = style,
-                        color = PureBlack
+                        color = color
                     )
                 }
             }
@@ -542,6 +550,10 @@ fun DailyProgressRing(
         label = "ring_pulse"
     )
 
+    val palette = AppThemeColors.palette
+    val ringTrackColor = if (palette.themeMode == AppThemeMode.RED) CharcoalDivider else palette.track
+    val ringProgressColor = palette.accent
+
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier.graphicsLayer {
@@ -554,7 +566,7 @@ fun DailyProgressRing(
             val inset = strokePx / 2f
             val arcSize = Size(size.width - strokePx, size.height - strokePx)
             drawArc(
-                color = TrackGrey,
+                color = ringTrackColor,
                 startAngle = -90f,
                 sweepAngle = 360f,
                 useCenter = false,
@@ -564,7 +576,7 @@ fun DailyProgressRing(
             )
             if (animatedProgress > 0f) {
                 drawArc(
-                    color = PureBlack,
+                    color = ringProgressColor,
                     startAngle = -90f,
                     sweepAngle = 360f * animatedProgress,
                     useCenter = false,

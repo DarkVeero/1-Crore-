@@ -232,6 +232,36 @@ class DuroodRepository(
         )
     }
 
+    suspend fun updateThemeMode(
+        userId: String,
+        themeMode: com.example.ui.theme.AppThemeMode,
+        fallbackDisplayName: String = "Friend"
+    ) {
+        val now = System.currentTimeMillis()
+        val existing = profileDao.getProfile(userId)
+        if (existing != null) {
+            profileDao.upsertProfile(
+                existing.copy(
+                    themeMode = themeMode.storageKey,
+                    pendingSync = true,
+                    updatedAtMillis = now
+                )
+            )
+        } else {
+            profileDao.upsertProfile(
+                UserProfileEntity(
+                    userId = userId,
+                    displayName = fallbackDisplayName.trim().ifBlank { "Friend" }.take(80),
+                    dailyTarget = DEFAULT_DAILY_TARGET,
+                    setupCompleted = false,
+                    pendingSync = true,
+                    updatedAtMillis = now,
+                    themeMode = themeMode.storageKey
+                )
+            )
+        }
+    }
+
     suspend fun incrementCount(userId: String, dateKey: String = LocalDate.now().toString(), delta: Long) {
         if (delta <= 0L) return
         dailyDao.incrementDay(userId, dateKey, delta, System.currentTimeMillis())
@@ -364,7 +394,10 @@ class DuroodRepository(
                 remindersEnabled = payload.remindersEnabled ?: existingProfile?.remindersEnabled ?: true,
                 startedAtMillis = resolvedStartedAt,
                 pendingSync = true,
-                updatedAtMillis = now
+                updatedAtMillis = now,
+                themeMode = payload.themeMode?.let {
+                    com.example.ui.theme.AppThemeMode.fromStorageKey(it).storageKey
+                } ?: existingProfile?.themeMode ?: com.example.ui.theme.AppThemeMode.BLACK_AND_WHITE.storageKey
             )
             profileDao.upsertProfile(mergedProfile)
 
@@ -489,6 +522,7 @@ class DuroodRepository(
                         "reminder2Hour" to localProfile.reminder2Hour.toLong(),
                         "reminder2Minute" to localProfile.reminder2Minute.toLong(),
                         "remindersEnabled" to localProfile.remindersEnabled,
+                        "themeMode" to com.example.ui.theme.AppThemeMode.fromStorageKey(localProfile.themeMode).storageKey,
                         "createdAt" to FieldValue.serverTimestamp(),
                         "updatedAt" to FieldValue.serverTimestamp()
                     )
@@ -521,6 +555,13 @@ class DuroodRepository(
                     ?: cloudProfile.reminder2Minute).toInt().coerceIn(0, 59)
                 val resolvedRemindersEnabled = runCatching { cloudProfileSnap.getBoolean("remindersEnabled") }.getOrNull()
                     ?: cloudProfile.remindersEnabled
+                val rawCloudTheme = runCatching { cloudProfileSnap.getString("themeMode") }.getOrNull()
+                    ?: cloudProfile.themeMode
+                val resolvedThemeMode = if (localProfile != null && localProfile.pendingSync && !localProfile.setupCompleted) {
+                    com.example.ui.theme.AppThemeMode.fromStorageKey(localProfile.themeMode).storageKey
+                } else {
+                    com.example.ui.theme.AppThemeMode.fromStorageKey(rawCloudTheme).storageKey
+                }
                 profileDao.upsertProfile(
                     UserProfileEntity(
                         userId = uid,
@@ -535,7 +576,8 @@ class DuroodRepository(
                         startedAtMillis = resolvedStartedAt,
                         lastSyncedAtMillis = localProfile?.lastSyncedAtMillis ?: 0L,
                         pendingSync = false,
-                        updatedAtMillis = System.currentTimeMillis()
+                        updatedAtMillis = System.currentTimeMillis(),
+                        themeMode = resolvedThemeMode
                     )
                 )
                 if (cloudDocHasSetup && !cloudProfile.setupCompleted) {
@@ -565,6 +607,7 @@ class DuroodRepository(
                     "reminder2Hour" to localProfile.reminder2Hour.toLong(),
                     "reminder2Minute" to localProfile.reminder2Minute.toLong(),
                     "remindersEnabled" to localProfile.remindersEnabled,
+                    "themeMode" to com.example.ui.theme.AppThemeMode.fromStorageKey(localProfile.themeMode).storageKey,
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
                 try {

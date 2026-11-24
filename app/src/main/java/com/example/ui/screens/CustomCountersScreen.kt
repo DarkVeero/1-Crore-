@@ -42,7 +42,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -77,12 +76,8 @@ import com.example.ui.components.RollingNumberText
 import com.example.ui.components.WhiteBorderPillButton
 import com.example.ui.components.formatNumber
 import com.example.ui.components.rememberReduceMotion
-import com.example.ui.theme.HairlineGrey
-import com.example.ui.theme.OffWhite
-import com.example.ui.theme.PureBlack
-import com.example.ui.theme.PureWhite
-import com.example.ui.theme.SubtextGrey
-import com.example.ui.theme.TrackGrey
+import com.example.ui.theme.AppThemeColors
+import com.example.ui.theme.appOutlinedTextFieldColors
 import java.util.Locale
 
 @Composable
@@ -94,6 +89,7 @@ fun CustomCountersScreen(
     onUpdateCounter: (counterId: String, name: String, targetCount: Long, currentCount: Long) -> Unit,
     onDeleteCounter: (counterId: String) -> Unit
 ) {
+    val palette = AppThemeColors.palette
     var showCreateDialog by remember { mutableStateOf(false) }
     var editingCounter by remember { mutableStateOf<CustomCounterEntity?>(null) }
     var deletingCounter by remember { mutableStateOf<CustomCounterEntity?>(null) }
@@ -127,20 +123,20 @@ fun CustomCountersScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
                             contentDescription = "Back",
-                            tint = PureBlack
+                            tint = palette.onCanvas
                         )
                     }
                     Column {
                         Text(
                             text = "Custom Counters",
                             style = MaterialTheme.typography.headlineMedium,
-                            color = PureBlack,
+                            color = palette.onCanvas,
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
                             text = "Separate counters with your own target",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = SubtextGrey
+                            color = palette.onCanvasSubtext
                         )
                     }
                 }
@@ -155,11 +151,11 @@ fun CustomCountersScreen(
 
             if (uiState.customCounters.isEmpty()) {
                 Surface(
-                    color = PureWhite,
+                    color = palette.cardSurface,
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, HairlineGrey, RoundedCornerShape(16.dp))
+                        .border(1.dp, palette.hairline, RoundedCornerShape(16.dp))
                 ) {
                     Column(
                         modifier = Modifier.padding(24.dp),
@@ -168,13 +164,13 @@ fun CustomCountersScreen(
                         Text(
                             text = "No custom counters yet",
                             style = MaterialTheme.typography.titleLarge,
-                            color = PureBlack,
+                            color = palette.onCard,
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
                             text = "Create a dedicated counter with any name and target count. Counts here stay completely separate from your 1 Crore total.",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = SubtextGrey
+                            color = palette.onCardSubtext
                         )
                         BlackPillButton(
                             text = "Create Custom Counter",
@@ -237,20 +233,48 @@ fun CustomCountersScreen(
     if (toDelete != null) {
         AlertDialog(
             onDismissRequest = { deletingCounter = null },
-            containerColor = PureWhite,
+            containerColor = palette.cardSurface,
             shape = RoundedCornerShape(16.dp),
-            title = { Text("Delete Counter?", color = PureBlack, fontWeight = FontWeight.Bold) },
-            text = {
+            modifier = Modifier.testTag("delete_custom_counter_dialog"),
+            title = {
                 Text(
-                    text = "Are you sure you want to permanently delete \"${toDelete.name}\" and its count of ${formatNumber(toDelete.currentCount)}?",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = SubtextGrey
+                    text = "Delete Zikr?",
+                    color = palette.onCard,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.testTag("delete_custom_counter_dialog_title")
                 )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = toDelete.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = palette.onCard,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.testTag("delete_custom_counter_name")
+                    )
+                    Text(
+                        text = "Total count: ${formatNumber(toDelete.currentCount)}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = palette.onCard,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.testTag("delete_custom_counter_count")
+                    )
+                    Text(
+                        text = "This will permanently delete this zikr and its counts",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = palette.onCardSubtext,
+                        modifier = Modifier.testTag("delete_custom_counter_warning")
+                    )
+                }
             },
             confirmButton = {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { deletingCounter = null }) {
-                        Text("Cancel", color = SubtextGrey)
+                    TextButton(
+                        onClick = { deletingCounter = null },
+                        modifier = Modifier.testTag("cancel_delete_custom_counter")
+                    ) {
+                        Text("Cancel", color = palette.onCardSubtext)
                     }
                     BlackPillButton(
                         text = "Delete",
@@ -273,17 +297,18 @@ private fun CustomCounterListItem(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val palette = AppThemeColors.palette
     val fraction = (counter.currentCount.toDouble() / counter.targetCount.coerceAtLeast(1L).toDouble())
         .toFloat()
         .coerceIn(0f, 1f)
     val percentLabel = String.format(Locale.US, "%.1f%%", fraction * 100f)
 
     Surface(
-        color = PureWhite,
+        color = palette.cardSurface,
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, HairlineGrey, RoundedCornerShape(16.dp))
+            .border(1.dp, palette.hairline, RoundedCornerShape(16.dp))
             .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
             .testTag("custom_counter_card_${counter.id}")
@@ -301,7 +326,7 @@ private fun CustomCounterListItem(
                     Text(
                         text = counter.name,
                         style = MaterialTheme.typography.titleLarge,
-                        color = PureBlack,
+                        color = palette.onCard,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -309,28 +334,32 @@ private fun CustomCounterListItem(
                     Text(
                         text = "${formatNumber(counter.currentCount)} / ${formatNumber(counter.targetCount)} · $percentLabel",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = SubtextGrey
+                        color = palette.onCardSubtext
                     )
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(
                         onClick = onEdit,
-                        modifier = Modifier.minimumInteractiveComponentSize()
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .testTag("custom_counter_rename_${counter.id}")
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.Edit,
-                            contentDescription = "Edit ${counter.name}",
-                            tint = PureBlack
+                            contentDescription = "Rename ${counter.name}",
+                            tint = palette.onCard
                         )
                     }
                     IconButton(
                         onClick = onDelete,
-                        modifier = Modifier.minimumInteractiveComponentSize()
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .testTag("custom_counter_delete_${counter.id}")
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.DeleteOutline,
                             contentDescription = "Delete ${counter.name}",
-                            tint = PureBlack
+                            tint = palette.onCard
                         )
                     }
                 }
@@ -340,13 +369,13 @@ private fun CustomCounterListItem(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(6.dp)
-                    .background(TrackGrey, RoundedCornerShape(999.dp))
+                    .background(palette.track, RoundedCornerShape(999.dp))
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(fraction.coerceAtLeast(if (counter.currentCount > 0L) 0.01f else 0f))
                         .fillMaxHeight()
-                        .background(PureBlack, RoundedCornerShape(999.dp))
+                        .background(palette.accent, RoundedCornerShape(999.dp))
                 )
             }
         }
@@ -362,6 +391,7 @@ fun CustomCounterDetailScreen(
     onAddCustomAmount: (Long) -> Unit,
     onUpdateCounter: (name: String, targetCount: Long, currentCount: Long) -> Unit
 ) {
+    val palette = AppThemeColors.palette
     val counter = uiState.customCounters.firstOrNull { it.id == counterId }
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
@@ -383,7 +413,7 @@ fun CustomCounterDetailScreen(
                 Text(
                     text = "Counter not found",
                     style = MaterialTheme.typography.titleLarge,
-                    color = PureBlack
+                    color = palette.onCanvas
                 )
                 BlackPillButton(text = "Go Back", onClick = onBack)
             }
@@ -437,7 +467,7 @@ fun CustomCounterDetailScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
                             contentDescription = "Back",
-                            tint = PureBlack
+                            tint = palette.onCanvas
                         )
                     }
                     OfflineSyncBadge(
@@ -455,7 +485,7 @@ fun CustomCounterDetailScreen(
                         Icon(
                             imageVector = Icons.Outlined.Edit,
                             contentDescription = "Edit Counter",
-                            tint = PureBlack
+                            tint = palette.onCanvas
                         )
                     }
                 }
@@ -463,7 +493,7 @@ fun CustomCounterDetailScreen(
                 Text(
                     text = counter.name.uppercase(Locale.US),
                     style = MaterialTheme.typography.labelMedium,
-                    color = SubtextGrey,
+                    color = palette.onCanvasSubtext,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -471,7 +501,8 @@ fun CustomCounterDetailScreen(
                 RollingNumberText(
                     value = counter.currentCount,
                     style = MaterialTheme.typography.displayMedium,
-                    reduceMotion = reduceMotion
+                    reduceMotion = reduceMotion,
+                    color = palette.onCanvas
                 )
 
                 Text(
@@ -481,7 +512,7 @@ fun CustomCounterDetailScreen(
                         "Target: ${formatNumber(counter.targetCount)} · $percentLabel (${formatNumber(remaining)} left)"
                     },
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (remaining == 0L) PureBlack else SubtextGrey,
+                    color = if (remaining == 0L) palette.onCanvas else palette.onCanvasSubtext,
                     fontWeight = if (remaining == 0L) FontWeight.SemiBold else FontWeight.Normal
                 )
             }
@@ -501,7 +532,7 @@ fun CustomCounterDetailScreen(
                             scaleY = buttonScale
                         }
                         .clip(CircleShape)
-                        .background(PureBlack)
+                        .background(palette.accent)
                         .clickable(
                             interactionSource = tapInteraction,
                             indication = null,
@@ -519,14 +550,14 @@ fun CustomCounterDetailScreen(
                         Text(
                             text = "+1",
                             style = MaterialTheme.typography.displayLarge,
-                            color = PureWhite,
+                            color = palette.onAccent,
                             fontWeight = FontWeight.Bold
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "TAP",
                             style = MaterialTheme.typography.labelMedium,
-                            color = PureWhite.copy(alpha = 0.72f)
+                            color = palette.onAccent.copy(alpha = 0.78f)
                         )
                     }
                 }
@@ -581,6 +612,7 @@ private fun CreateOrEditCustomCounterDialog(
     onDismiss: () -> Unit,
     onSave: (name: String, targetCount: Long, currentCount: Long?) -> Unit
 ) {
+    val palette = AppThemeColors.palette
     var nameInput by remember(initialName) { mutableStateOf(initialName) }
     var targetInput by remember(initialTarget) { mutableStateOf(initialTarget) }
     var countInput by remember(initialCount) { mutableStateOf(initialCount?.toString().orEmpty()) }
@@ -595,13 +627,13 @@ private fun CreateOrEditCustomCounterDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = PureWhite,
+        containerColor = palette.cardSurface,
         shape = RoundedCornerShape(16.dp),
         title = {
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleLarge,
-                color = PureBlack
+                color = palette.onCard
             )
         },
         text = {
@@ -611,12 +643,7 @@ private fun CreateOrEditCustomCounterDialog(
                     onValueChange = { if (it.length <= 80) nameInput = it },
                     label = { Text("Counter Name") },
                     singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PureBlack,
-                        unfocusedBorderColor = HairlineGrey,
-                        focusedLabelColor = PureBlack,
-                        cursorColor = PureBlack
-                    ),
+                    colors = appOutlinedTextFieldColors(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("custom_counter_name_input")
@@ -627,12 +654,7 @@ private fun CreateOrEditCustomCounterDialog(
                     label = { Text("Target Count") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PureBlack,
-                        unfocusedBorderColor = HairlineGrey,
-                        focusedLabelColor = PureBlack,
-                        cursorColor = PureBlack
-                    ),
+                    colors = appOutlinedTextFieldColors(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("custom_counter_target_input")
@@ -644,12 +666,7 @@ private fun CreateOrEditCustomCounterDialog(
                         label = { Text("Current Count") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = PureBlack,
-                            unfocusedBorderColor = HairlineGrey,
-                            focusedLabelColor = PureBlack,
-                            cursorColor = PureBlack
-                        ),
+                        colors = appOutlinedTextFieldColors(),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("custom_counter_current_input")
@@ -660,7 +677,7 @@ private fun CreateOrEditCustomCounterDialog(
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = onDismiss) {
-                    Text("Cancel", color = SubtextGrey)
+                    Text("Cancel", color = palette.onCardSubtext)
                 }
                 BlackPillButton(
                     text = confirmLabel,
@@ -683,18 +700,19 @@ private fun CustomCounterAmountDialog(
     onDismiss: () -> Unit,
     onConfirm: (Long) -> Unit
 ) {
+    val palette = AppThemeColors.palette
     var input by remember { mutableStateOf("") }
     val parsed = input.toLongOrNull()?.takeIf { it in 1L..1_000_000L }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = PureWhite,
+        containerColor = palette.cardSurface,
         shape = RoundedCornerShape(16.dp),
         title = {
             Text(
                 text = "Add Custom Amount",
                 style = MaterialTheme.typography.titleLarge,
-                color = PureBlack
+                color = palette.onCard
             )
         },
         text = {
@@ -702,7 +720,7 @@ private fun CustomCounterAmountDialog(
                 Text(
                     text = "How many would you like to add to $counterName?",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = SubtextGrey
+                    color = palette.onCardSubtext
                 )
                 OutlinedTextField(
                     value = input,
@@ -710,12 +728,7 @@ private fun CustomCounterAmountDialog(
                     label = { Text("Enter Amount") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PureBlack,
-                        unfocusedBorderColor = HairlineGrey,
-                        focusedLabelColor = PureBlack,
-                        cursorColor = PureBlack
-                    ),
+                    colors = appOutlinedTextFieldColors(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("custom_counter_amount_input")
@@ -725,7 +738,7 @@ private fun CustomCounterAmountDialog(
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = onDismiss) {
-                    Text("Cancel", color = SubtextGrey)
+                    Text("Cancel", color = palette.onCardSubtext)
                 }
                 BlackPillButton(
                     text = "Add",

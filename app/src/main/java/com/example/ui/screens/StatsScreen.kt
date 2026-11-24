@@ -35,17 +35,16 @@ import com.example.ui.MainUiState
 import com.example.ui.components.FaintGridBackground
 import com.example.ui.components.StatsMilestoneBadgesSection
 import com.example.ui.components.formatNumber
+import com.example.ui.theme.AppThemeColors
+import com.example.ui.theme.AppThemeMode
 import com.example.ui.theme.FaintGridGrey
-import com.example.ui.theme.HairlineGrey
-import com.example.ui.theme.PureBlack
-import com.example.ui.theme.PureWhite
-import com.example.ui.theme.SubtextGrey
 import java.time.LocalDate
 import java.time.format.TextStyle
 import java.util.Locale
 
 @Composable
 fun StatsScreen(uiState: MainUiState) {
+    val palette = AppThemeColors.palette
     val best = uiState.bestDay
     val byDate = uiState.allDays.associateBy { it.dateKey }
     val today = uiState.currentDate
@@ -71,21 +70,21 @@ fun StatsScreen(uiState: MainUiState) {
                 Text(
                     text = "Stats",
                     style = MaterialTheme.typography.headlineLarge,
-                    color = PureBlack
+                    color = palette.onCanvas
                 )
                 Text(
                     text = "Consistency overview",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = SubtextGrey
+                    color = palette.onCanvasSubtext
                 )
             }
 
             Surface(
-                color = PureWhite,
+                color = palette.cardSurface,
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, HairlineGrey, RoundedCornerShape(16.dp))
+                    .border(1.dp, palette.hairline, RoundedCornerShape(16.dp))
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Row(
@@ -103,7 +102,7 @@ fun StatsScreen(uiState: MainUiState) {
                             modifier = Modifier
                                 .width(1.dp)
                                 .fillMaxHeight()
-                                .background(HairlineGrey)
+                                .background(palette.hairline)
                         )
                         StatCell(
                             label = "BEST DAY",
@@ -113,7 +112,7 @@ fun StatsScreen(uiState: MainUiState) {
                         )
                     }
 
-                    HorizontalDivider(color = HairlineGrey, thickness = 1.dp)
+                    HorizontalDivider(color = palette.hairline, thickness = 1.dp)
 
                     Row(
                         modifier = Modifier
@@ -130,7 +129,7 @@ fun StatsScreen(uiState: MainUiState) {
                             modifier = Modifier
                                 .width(1.dp)
                                 .fillMaxHeight()
-                                .background(HairlineGrey)
+                                .background(palette.hairline)
                         )
                         StatCell(
                             label = "ACTIVE DAYS",
@@ -143,11 +142,11 @@ fun StatsScreen(uiState: MainUiState) {
             }
 
             Surface(
-                color = PureWhite,
+                color = palette.cardSurface,
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, HairlineGrey, RoundedCornerShape(16.dp))
+                    .border(1.dp, palette.hairline, RoundedCornerShape(16.dp))
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Row(
@@ -158,12 +157,12 @@ fun StatsScreen(uiState: MainUiState) {
                         Text(
                             text = "LAST 14 DAYS",
                             style = MaterialTheme.typography.labelSmall,
-                            color = SubtextGrey
+                            color = palette.onCardSubtext
                         )
                         Text(
                             text = "Target: ${formatNumber(uiState.dailyTarget.toLong())}",
                             style = MaterialTheme.typography.labelMedium,
-                            color = SubtextGrey
+                            color = palette.onCardSubtext
                         )
                     }
 
@@ -174,6 +173,14 @@ fun StatsScreen(uiState: MainUiState) {
                         last14Days.maxOfOrNull { it.second } ?: 0L,
                         1L
                     )
+                    val chartGridLineColor = if (palette.themeMode == AppThemeMode.BLACK_AND_WHITE) {
+                        FaintGridGrey
+                    } else {
+                        palette.hairline.copy(alpha = 0.7f)
+                    }
+                    val targetLineColor = palette.onCardSubtext
+                    val barFillColor = palette.accent
+                    val emptyBarColor = palette.hairline
 
                     Canvas(
                         modifier = Modifier
@@ -184,7 +191,7 @@ fun StatsScreen(uiState: MainUiState) {
                         listOf(0.25f, 0.5f, 0.75f, 1f).forEach { ratio ->
                             val y = size.height * (1f - ratio)
                             drawLine(
-                                color = FaintGridGrey,
+                                color = chartGridLineColor,
                                 start = Offset(0f, y),
                                 end = Offset(size.width, y),
                                 strokeWidth = 1.dp.toPx()
@@ -194,7 +201,7 @@ fun StatsScreen(uiState: MainUiState) {
                         // Dashed daily target reference line
                         val targetY = size.height * (1f - (uiState.dailyTarget.toFloat() / maxVal.toFloat()))
                         drawLine(
-                            color = SubtextGrey,
+                            color = targetLineColor,
                             start = Offset(0f, targetY),
                             end = Offset(size.width, targetY),
                             strokeWidth = 1.dp.toPx(),
@@ -210,13 +217,13 @@ fun StatsScreen(uiState: MainUiState) {
                             val left = index * slotWidth + (slotWidth - barWidth) / 2f
                             if (barHeight > 0f) {
                                 drawRect(
-                                    color = PureBlack,
+                                    color = barFillColor,
                                     topLeft = Offset(left, size.height - barHeight),
                                     size = Size(barWidth, barHeight)
                                 )
                             } else {
                                 drawRect(
-                                    color = HairlineGrey,
+                                    color = emptyBarColor,
                                     topLeft = Offset(left, size.height - 2.dp.toPx()),
                                     size = Size(barWidth, 2.dp.toPx())
                                 )
@@ -239,7 +246,7 @@ fun StatsScreen(uiState: MainUiState) {
                             Text(
                                 text = label,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = SubtextGrey
+                                color = palette.onCardSubtext
                             )
                         }
                     }
@@ -258,6 +265,7 @@ private fun StatCell(
     subtext: String,
     modifier: Modifier = Modifier
 ) {
+    val palette = AppThemeColors.palette
     Column(
         modifier = modifier.padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -265,18 +273,18 @@ private fun StatCell(
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = SubtextGrey
+            color = palette.onCardSubtext
         )
         Text(
             text = value,
             style = MaterialTheme.typography.headlineMedium,
-            color = PureBlack,
+            color = palette.onCard,
             fontWeight = FontWeight.Bold
         )
         Text(
             text = subtext,
             style = MaterialTheme.typography.labelMedium,
-            color = SubtextGrey
+            color = palette.onCardSubtext
         )
     }
 }

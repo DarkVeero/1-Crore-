@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -32,13 +31,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.clipPath
-import androidx.compose.ui.graphics.drawscope.clipRect
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -54,11 +51,12 @@ import com.example.ui.components.BlackPillButton
 import com.example.ui.components.FaintGridBackground
 import com.example.ui.components.isLowEndOrLowRamDevice
 import com.example.ui.components.rememberReduceMotion
+import com.example.ui.theme.AppThemeColors
 import com.example.ui.theme.InterFontFamily
 import com.example.ui.theme.PureBlack
-import com.example.ui.theme.SubtextGrey
 import kotlinx.coroutines.delay
 import kotlin.math.PI
+import kotlin.math.hypot
 import kotlin.math.sin
 
 enum class SplashIntroStage {
@@ -88,20 +86,23 @@ object SplashIntroSpec {
     const val ONE_REVEAL_DURATION_MS: Int = 0
     const val BODY_TASBEEH_DURATION_MS: Int = 0
     const val FOOTER_CREDIT_DURATION_MS: Int = 0
-    const val RING_SPIN_DURATION_MS: Int = 250
+    const val START_HOLD_MS: Int = 40
+    const val RING_SPIN_DURATION_MS: Int = 560
     const val WAVE_WIPE_DURATION_MS: Int = 300
     const val HOME_SETTLE_DURATION_MS: Int = 0
     const val REDUCE_MOTION_HOLD_MS: Long = 180L
     const val LOGO_TILE_SIZE_DP: Int = 144
+    const val MAX_RING_SWEEP_DEGREES: Float = 270f
 
-    // Cumulative stage boundaries (550 ms WhatsApp-style cold start, strictly <= 1000 ms)
+    // Cumulative stage boundaries (900 ms total, strictly <= 1000 ms from tap to Home)
     const val DOT_END_MS: Int = DOT_DROP_DURATION_MS // 0
     const val ONE_END_MS: Int = DOT_END_MS + ONE_REVEAL_DURATION_MS // 0
     const val BODY_END_MS: Int = ONE_END_MS + BODY_TASBEEH_DURATION_MS // 0
     const val CREDIT_END_MS: Int = BODY_END_MS + FOOTER_CREDIT_DURATION_MS // 0
-    const val RING_END_MS: Int = CREDIT_END_MS + RING_SPIN_DURATION_MS // 250
-    const val WAVE_END_MS: Int = RING_END_MS + WAVE_WIPE_DURATION_MS // 550
-    const val TOTAL_INTRO_DURATION_MS: Int = WAVE_END_MS + HOME_SETTLE_DURATION_MS // 550
+    const val RING_START_MS: Int = CREDIT_END_MS + START_HOLD_MS // 40
+    const val RING_END_MS: Int = RING_START_MS + RING_SPIN_DURATION_MS // 600
+    const val WAVE_END_MS: Int = RING_END_MS + WAVE_WIPE_DURATION_MS // 900
+    const val TOTAL_INTRO_DURATION_MS: Int = WAVE_END_MS + HOME_SETTLE_DURATION_MS // 900
 
     private val ringEaseOut = CubicBezierEasing(0.0f, 0.0f, 0.2f, 1.0f)
 
@@ -113,11 +114,14 @@ object SplashIntroSpec {
     )
 
     fun stageForElapsedMs(elapsedMs: Float): SplashIntroStage = when {
-        elapsedMs <= 0f -> SplashIntroStage.TILE_READY
+        elapsedMs <= START_HOLD_MS -> SplashIntroStage.TILE_READY
         elapsedMs < RING_END_MS -> SplashIntroStage.RING_SPIN
         elapsedMs < WAVE_END_MS -> SplashIntroStage.WAVE_WIPE
         else -> SplashIntroStage.COMPLETE
     }
+
+    fun ringSweepDegrees(ringT: Float): Float =
+        (ringT.coerceIn(0f, 1f) * MAX_RING_SWEEP_DEGREES).coerceIn(0f, MAX_RING_SWEEP_DEGREES)
 
     fun frameValuesForElapsedMs(
         elapsedMs: Float,
@@ -137,7 +141,7 @@ object SplashIntroSpec {
         val rawRingT = if (RING_SPIN_DURATION_MS <= 0) {
             1f
         } else {
-            ((tMs - CREDIT_END_MS) / RING_SPIN_DURATION_MS.toFloat()).coerceIn(0f, 1f)
+            ((tMs - RING_START_MS) / RING_SPIN_DURATION_MS.toFloat()).coerceIn(0f, 1f)
         }
         val rawWaveT = if (WAVE_WIPE_DURATION_MS <= 0) {
             1f
@@ -280,7 +284,7 @@ fun SplashScreen(
  * Post-login / post-signup overlay or loading screen.
  * - For returning logins (`playPostSignupIntro == false`): displays the static completed v11 logo
  *   + footer credit on the faint grid with zero re-animation and zero added delay.
- * - After signup (`playPostSignupIntro == true`): plays the exact ~0.55s v11 animated intro +
+ * - After signup (`playPostSignupIntro == true`): plays the ~0.9s v11 animated intro +
  *   footer credit + bottom-to-top black wave wipe uncovering the live destination behind it.
  */
 @Composable
@@ -349,6 +353,7 @@ fun AnimatedLogoLoadingScreen(
         ) {
             FaintGridBackground(reduceMotion = reduceMotion)
 
+            val palette = AppThemeColors.palette
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
@@ -361,9 +366,6 @@ fun AnimatedLogoLoadingScreen(
             ) {
                 V11AnimatedLogoTile(
                     showStaticFinal = true,
-                    dotT = 1f,
-                    oneT = 1f,
-                    bodyT = 1f,
                     ringT = 1f
                 )
 
@@ -371,7 +373,7 @@ fun AnimatedLogoLoadingScreen(
                 Text(
                     text = offlineErrorMessage,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = PureBlack,
+                    color = palette.onCanvas,
                     fontWeight = FontWeight.Medium,
                     textAlign = TextAlign.Center,
                     modifier = Modifier
@@ -397,7 +399,7 @@ fun AnimatedLogoLoadingScreen(
                     ) {
                         Text(
                             text = "Use a different account",
-                            color = SubtextGrey
+                            color = palette.onCanvasSubtext
                         )
                     }
                 }
@@ -418,15 +420,13 @@ private fun V11SplashWaveStage(
         showStaticFinal = showStaticFinal
     )
     val waveProgress = frame.waveProgress
-    val dotT = frame.dotT
-    val oneT = frame.oneT
-    val bodyT = frame.bodyT
     val creditT = frame.creditT
     val ringT = frame.ringT
 
     val splashCleared = !showStaticFinal && waveProgress >= 1f
     val clipPath = remember { Path() }
     val waveBandPath = remember { Path() }
+    val palette = AppThemeColors.palette
 
     Box(modifier = modifier) {
         if (!splashCleared) {
@@ -467,43 +467,36 @@ private fun V11SplashWaveStage(
 
                 Box(
                     contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .safeDrawingPadding()
+                    modifier = Modifier.fillMaxSize()
                 ) {
-                    // Exact center spot and 144.dp size as Frame-0 launch window tile
+                    // Exact full-screen center spot and 144.dp size matching Frame-0 launch window tile
                     V11AnimatedLogoTile(
                         showStaticFinal = showStaticFinal,
-                        dotT = dotT,
-                        oneT = oneT,
-                        bodyT = bodyT,
                         ringT = ringT,
                         modifier = Modifier.align(Alignment.Center)
                     )
 
                     // Bottom footer signature ("Rza Mudasir Attari" clearly separated at footer)
                     if (creditT > 0f) {
-                        val slideDp = ((1f - creditT) * 8f).dp
                         Text(
                             text = SplashIntroSpec.CREDIT_NAME,
                             fontFamily = InterFontFamily,
                             fontWeight = FontWeight.Medium,
                             fontSize = 11.sp,
                             letterSpacing = 0.4.sp,
-                            color = SubtextGrey,
+                            color = palette.onCanvasSubtext,
                             textAlign = TextAlign.Center,
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
+                                .safeDrawingPadding()
                                 .padding(bottom = 26.dp)
-                                .offset(y = slideDp)
-                                .alpha(creditT)
                                 .testTag("splash_credit_name")
                         )
                     }
                 }
             }
 
-            // Bottom-to-top curved black wave crest wiping the splash away & unveiling Home beneath
+            // Bottom-to-top curved wave crest wiping the splash away & unveiling Home beneath
             if (waveProgress > 0f && waveProgress < 1f) {
                 Canvas(
                     modifier = Modifier
@@ -537,7 +530,7 @@ private fun V11SplashWaveStage(
                         waveBandPath.lineTo(x, yBottom)
                     }
                     waveBandPath.close()
-                    drawPath(path = waveBandPath, color = PureBlack)
+                    drawPath(path = waveBandPath, color = palette.splashWave)
                 }
             }
         }
@@ -547,13 +540,11 @@ private fun V11SplashWaveStage(
 @Composable
 private fun V11AnimatedLogoTile(
     showStaticFinal: Boolean,
-    dotT: Float,
-    oneT: Float,
-    bodyT: Float,
     ringT: Float,
     modifier: Modifier = Modifier
 ) {
     val tileShape = RoundedCornerShape(30.dp)
+    val ringWedgePath = remember { Path() }
 
     Box(
         contentAlignment = Alignment.Center,
@@ -573,7 +564,8 @@ private fun V11AnimatedLogoTile(
                     .testTag("splash_logo_static_final")
             )
         } else {
-            // Frame 0: Black logo tile already present — zero empty white placeholder
+            // Complete logo body (tile + dot + white '1' + body/tasbeeh) drawn 100% statically from Frame 0:
+            // never fades, slides, or clips in — zero empty black patch at any frame.
             Image(
                 painter = painterResource(id = R.drawable.ic_logo_v11_tile),
                 contentDescription = null,
@@ -582,70 +574,62 @@ private fun V11AnimatedLogoTile(
                     .fillMaxSize()
                     .testTag("splash_logo_tile")
             )
+            Image(
+                painter = painterResource(id = R.drawable.ic_logo_v11_dot),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .testTag("splash_logo_dot")
+            )
+            Image(
+                painter = painterResource(id = R.drawable.ic_logo_v11_one),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .testTag("splash_logo_one")
+            )
+            Image(
+                painter = painterResource(id = R.drawable.ic_logo_v11_body_tasbeeh),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .testTag("splash_logo_body_tasbeeh")
+            )
 
-            // (1) Small white dot flies in from ABOVE (0-150 ms)
-            if (dotT > 0f) {
-                val clampedDot = dotT.coerceIn(0f, 1f)
-                Image(
-                    painter = painterResource(id = R.drawable.ic_logo_v11_dot),
-                    contentDescription = null,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            translationY = -(1f - clampedDot) * size.height * 0.45f
-                            alpha = (clampedDot * 1.4f).coerceIn(0f, 1f)
-                        }
-                        .testTag("splash_logo_dot")
-                )
-            }
-
-            // (2) Bold white '1' fades + draws in (150-300 ms)
-            if (oneT > 0f) {
-                val clampedOne = oneT.coerceIn(0f, 1f)
-                Image(
-                    painter = painterResource(id = R.drawable.ic_logo_v11_one),
-                    contentDescription = null,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .drawWithContent {
-                            clipRect(bottom = size.height * clampedOne) {
-                                this@drawWithContent.drawContent()
-                            }
-                        }
-                        .alpha(clampedOne)
-                        .testTag("splash_logo_one")
-                )
-            }
-
-            // (3) Standing bearded man silhouette + tasbeeh appear together (300-500 ms)
-            if (bodyT > 0f) {
-                val clampedBody = bodyT.coerceIn(0f, 1f)
-                Image(
-                    painter = painterResource(id = R.drawable.ic_logo_v11_body_tasbeeh),
-                    contentDescription = null,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            translationY = (1f - clampedBody) * size.height * 0.04f
-                            alpha = clampedBody
-                        }
-                        .testTag("splash_logo_body_tasbeeh")
-                )
-            }
-
-            // (4) Asymmetric white loading ring is visible from Frame 0 and spins immediately (0-250 ms)
-            val clampedRing = ringT.coerceIn(0f, 1f)
+            // ONLY the white arc/ring draws clockwise from 12 o'clock to 270 degrees and stops (gap at top-left)
+            val sweepDeg = SplashIntroSpec.ringSweepDegrees(ringT)
             Image(
                 painter = painterResource(id = R.drawable.ic_logo_v11_ring),
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer {
-                        rotationZ = (1f - clampedRing) * -360f
+                    .drawWithContent {
+                        if (sweepDeg > 0f) {
+                            val cx = size.width / 2f
+                            val cy = size.height / 2f
+                            val r = hypot(cx, cy) + 2f
+                            ringWedgePath.reset()
+                            ringWedgePath.moveTo(cx, cy)
+                            ringWedgePath.arcTo(
+                                rect = Rect(
+                                    left = cx - r,
+                                    top = cy - r,
+                                    right = cx + r,
+                                    bottom = cy + r
+                                ),
+                                startAngleDegrees = -90f,
+                                sweepAngleDegrees = sweepDeg,
+                                forceMoveTo = false
+                            )
+                            ringWedgePath.close()
+                            clipPath(ringWedgePath) {
+                                this@drawWithContent.drawContent()
+                            }
+                        }
                     }
                     .testTag("splash_logo_ring")
             )

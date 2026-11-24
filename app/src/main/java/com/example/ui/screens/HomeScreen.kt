@@ -86,7 +86,6 @@ import com.example.ui.MainUiState
 import com.example.ui.components.AnnouncementDialog
 import com.example.ui.components.BlackPillButton
 import com.example.ui.components.FaintGridBackground
-import com.example.ui.components.HomeMilestoneBadgeCard
 import com.example.ui.components.MilestoneBadgeCelebrationDialog
 import com.example.ui.components.OfflineSyncBadge
 import com.example.ui.components.RollingNumberText
@@ -97,18 +96,14 @@ import com.example.ui.components.formatSyncTime
 import com.example.ui.components.rememberReduceMotion
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import com.example.ui.theme.HairlineGrey
-import com.example.ui.theme.OffWhite
-import com.example.ui.theme.PureBlack
-import com.example.ui.theme.PureWhite
-import com.example.ui.theme.SubtextGrey
-import com.example.ui.theme.TrackGrey
+import com.example.ui.theme.AppThemeColors
 import com.example.update.AppUpdateInfo
 import com.example.update.AppUpdateManager
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 internal const val ARABIC_GREETING = "صَلُّوا عَلَيْهِ\nوَسَلِّمُوا تَسْلِيمًا"
+internal const val HOME_AYAT_BASE_FONT_SIZE_SP = 22f
 
 internal fun arabicGraphemeEndIndices(text: String): List<Int> {
     val ends = mutableListOf<Int>()
@@ -161,6 +156,7 @@ fun HomeScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val reduceMotion = rememberReduceMotion()
+    val palette = AppThemeColors.palette
     var showShareChoiceDialog by remember { mutableStateOf(false) }
     var showCustomDialog by remember { mutableStateOf(initialShowCustomDialog) }
 
@@ -215,14 +211,20 @@ fun HomeScreen(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val horizontalMargin = if (maxWidth < 340.dp) 16.dp else 24.dp
         FaintGridBackground(reduceMotion = reduceMotion)
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 20.dp)
+                .padding(
+                    start = horizontalMargin,
+                    end = horizontalMargin,
+                    top = 12.dp,
+                    bottom = 20.dp
+                )
                 .widthIn(max = 600.dp)
                 .align(Alignment.TopCenter),
             verticalArrangement = Arrangement.spacedBy(20.dp)
@@ -237,29 +239,22 @@ fun HomeScreen(
                 val hasGlobalStats = globalStats != null &&
                     globalStats.totalCount > 0L &&
                     globalStats.userCount > 0L
-                Spacer(
+                BoxWithConstraints(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(10.dp)
-                        .testTag("home_header_top_spacer")
-                )
-                AnimatedArabicGreeting(
-                    reduceMotion = reduceMotion,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(16.dp)
-                        .testTag("home_header_below_ayat_spacer")
-                )
-                if ((hasGlobalStats && globalStats != null) || uiState.availableUpdate != null) {
+                        .testTag("home_header_top_row")
+                ) {
+                    val headerGutter = if (maxWidth < 312.dp) 8.dp else 12.dp
+                    val maxAyatWidth = minOf((maxWidth - headerGutter) * 0.48f, 232.dp)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.Top,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(headerGutter)
                     ) {
-                        Box(modifier = Modifier.weight(1f)) {
+                        Box(
+                            modifier = Modifier.weight(1f),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
                             if (hasGlobalStats && globalStats != null) {
                                 GlobalCounterTopLeftBlock(
                                     stats = globalStats,
@@ -268,27 +263,47 @@ fun HomeScreen(
                                 )
                             }
                         }
-                        if (uiState.availableUpdate != null) {
-                            UpdateBadgeIconButton(onClick = onOpenUpdateDialog)
+                        AnimatedArabicGreeting(
+                            reduceMotion = reduceMotion,
+                            modifier = Modifier.widthIn(max = maxAyatWidth)
+                        )
+                    }
+                }
+                Spacer(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(10.dp)
+                        .testTag("home_header_below_ayat_spacer")
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("home_welcome_row"),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = "Welcome, ${uiState.displayName}",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = palette.onCanvas,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.testTag("home_welcome_text")
+                        )
+                        uiState.startDateFormatted?.let { started ->
+                            Text(
+                                text = "Started $started",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = palette.onCanvasSubtext,
+                                modifier = Modifier.testTag("home_started_date")
+                            )
                         }
                     }
-                    Spacer(modifier = Modifier.height(6.dp))
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = "Welcome, ${uiState.displayName}",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = PureBlack,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.testTag("home_welcome_text")
-                    )
-                    uiState.startDateFormatted?.let { started ->
-                        Text(
-                            text = "Started $started",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = SubtextGrey,
-                            modifier = Modifier.testTag("home_started_date")
-                        )
+                    if (uiState.availableUpdate != null) {
+                        UpdateBadgeIconButton(onClick = onOpenUpdateDialog)
                     }
                 }
                 Spacer(modifier = Modifier.height(6.dp))
@@ -303,11 +318,11 @@ fun HomeScreen(
             }
 
             Surface(
-                color = PureWhite,
+                color = palette.cardSurface,
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, HairlineGrey, RoundedCornerShape(16.dp))
+                    .border(1.dp, palette.hairline, RoundedCornerShape(16.dp))
             ) {
                 Column(modifier = Modifier.padding(22.dp)) {
                     Row(
@@ -318,12 +333,12 @@ fun HomeScreen(
                         Text(
                             text = "TOTAL RECITED",
                             style = MaterialTheme.typography.labelSmall,
-                            color = SubtextGrey
+                            color = palette.onCardSubtext
                         )
                         Text(
                             text = uiState.progressPercentFormatted,
                             style = MaterialTheme.typography.labelLarge,
-                            color = PureBlack,
+                            color = palette.onCard,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -333,14 +348,15 @@ fun HomeScreen(
                     RollingNumberText(
                         value = uiState.totalCount,
                         style = MaterialTheme.typography.displayLarge,
-                        reduceMotion = reduceMotion
+                        reduceMotion = reduceMotion,
+                        color = palette.onCard
                     )
 
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "out of ${formatNumber(DuroodRepository.ONE_CRORE)}",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = SubtextGrey
+                        color = palette.onCardSubtext
                     )
 
                     Spacer(modifier = Modifier.height(18.dp))
@@ -349,13 +365,13 @@ fun HomeScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(6.dp)
-                            .background(TrackGrey, RoundedCornerShape(999.dp))
+                            .background(palette.track, RoundedCornerShape(999.dp))
                     ) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth(animatedProgress.coerceAtLeast(if (uiState.totalCount > 0L) 0.01f else 0f))
                                 .fillMaxHeight()
-                                .background(PureBlack, RoundedCornerShape(999.dp))
+                                .background(palette.accent, RoundedCornerShape(999.dp))
                         )
                     }
 
@@ -368,23 +384,23 @@ fun HomeScreen(
                         Text(
                             text = "${formatNumber(uiState.remaining)} remaining",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = PureBlack
+                            color = palette.onCard
                         )
                         Text(
                             text = "Goal",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = SubtextGrey
+                            color = palette.onCardSubtext
                         )
                     }
                 }
             }
 
             Surface(
-                color = PureWhite,
+                color = palette.cardSurface,
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, HairlineGrey, RoundedCornerShape(16.dp))
+                    .border(1.dp, palette.hairline, RoundedCornerShape(16.dp))
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Row(
@@ -402,7 +418,7 @@ fun HomeScreen(
                             modifier = Modifier
                                 .width(1.dp)
                                 .fillMaxHeight()
-                                .background(HairlineGrey)
+                                .background(palette.hairline)
                         )
                         HomeMetricCell(
                             label = "DAYS LEFT",
@@ -412,7 +428,7 @@ fun HomeScreen(
                         )
                     }
 
-                    HorizontalDivider(color = HairlineGrey, thickness = 1.dp)
+                    HorizontalDivider(color = palette.hairline, thickness = 1.dp)
 
                     Row(
                         modifier = Modifier
@@ -429,7 +445,7 @@ fun HomeScreen(
                             modifier = Modifier
                                 .width(1.dp)
                                 .fillMaxHeight()
-                                .background(HairlineGrey)
+                                .background(palette.hairline)
                         )
                         HomeMetricCell(
                             label = "LAST SYNCED",
@@ -447,11 +463,6 @@ fun HomeScreen(
                     }
                 }
             }
-
-            HomeMilestoneBadgeCard(
-                progress = uiState.badgeProgress,
-                onClick = onOpenStats
-            )
 
             Row(
                 modifier = Modifier
@@ -492,14 +503,14 @@ fun HomeScreen(
                     Text(
                         text = "CUSTOM COUNTERS",
                         style = MaterialTheme.typography.labelSmall,
-                        color = SubtextGrey
+                        color = palette.onCanvasSubtext
                     )
                     Surface(
-                        color = PureWhite,
+                        color = palette.cardSurface,
                         shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .border(1.dp, HairlineGrey, RoundedCornerShape(16.dp))
+                            .border(1.dp, palette.hairline, RoundedCornerShape(16.dp))
                     ) {
                         Column(modifier = Modifier.fillMaxWidth()) {
                             uiState.customCounters.forEachIndexed { index, counter ->
@@ -508,7 +519,7 @@ fun HomeScreen(
                                     onClick = { onOpenCustomCounter(counter.id) }
                                 )
                                 if (index < uiState.customCounters.lastIndex) {
-                                    HorizontalDivider(color = HairlineGrey, thickness = 1.dp)
+                                    HorizontalDivider(color = palette.hairline, thickness = 1.dp)
                                 }
                             }
                         }
@@ -628,47 +639,70 @@ fun GlobalCounterTopLeftBlock(
     isOnline: Boolean,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier.testTag("home_global_counter_block"),
-        verticalArrangement = Arrangement.spacedBy(1.dp),
-        horizontalAlignment = Alignment.Start
-    ) {
-        Text(
-            text = GlobalStatsCache.formatTotalLine(stats.totalCount),
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = 11.sp,
-                lineHeight = 14.sp,
-                letterSpacing = 0.sp
-            ),
-            color = PureBlack,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.testTag("home_global_counter_total")
-        )
-        Text(
-            text = GlobalStatsCache.formatUsersLine(stats.userCount),
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = 10.sp,
-                lineHeight = 13.sp,
-                letterSpacing = 0.sp
-            ),
-            color = SubtextGrey,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.testTag("home_global_counter_users")
-        )
-        Text(
-            text = GlobalStatsCache.formatSubtitleLine(
-                isOnline = isOnline,
-                fetchedAtMillis = stats.fetchedAtMillis
-            ),
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = 9.sp,
-                lineHeight = 12.sp,
-                letterSpacing = 0.sp
-            ),
-            color = SubtextGrey,
-            fontWeight = FontWeight.Normal,
-            modifier = Modifier.testTag("home_global_counter_subtitle")
-        )
+    val palette = AppThemeColors.palette
+    BoxWithConstraints(modifier = modifier.testTag("home_global_counter_block")) {
+        var textScale by remember(maxWidth, stats.totalCount, stats.userCount, isOnline) {
+            mutableFloatStateOf(1f)
+        }
+        Column(
+            verticalArrangement = Arrangement.spacedBy(1.dp),
+            horizontalAlignment = Alignment.Start
+        ) {
+            Text(
+                text = GlobalStatsCache.formatTotalLine(stats.totalCount),
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = (11f * textScale).sp,
+                    lineHeight = (14f * textScale).sp,
+                    letterSpacing = 0.sp
+                ),
+                color = palette.onCanvas,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                softWrap = true,
+                overflow = TextOverflow.Ellipsis,
+                onTextLayout = { layoutResult ->
+                    if ((layoutResult.lineCount > 1 || layoutResult.hasVisualOverflow) && textScale > 0.78f) {
+                        textScale = (textScale - 0.06f).coerceAtLeast(0.78f)
+                    }
+                },
+                modifier = Modifier.testTag("home_global_counter_total")
+            )
+            Text(
+                text = GlobalStatsCache.formatUsersLine(stats.userCount),
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = (10f * textScale).sp,
+                    lineHeight = (13f * textScale).sp,
+                    letterSpacing = 0.sp
+                ),
+                color = palette.onCanvasSubtext,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.testTag("home_global_counter_users")
+            )
+            Text(
+                text = GlobalStatsCache.formatSubtitleLine(
+                    isOnline = isOnline,
+                    fetchedAtMillis = stats.fetchedAtMillis
+                ),
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = (9f * textScale).sp,
+                    lineHeight = (12f * textScale).sp,
+                    letterSpacing = 0.sp
+                ),
+                color = palette.onCanvasSubtext,
+                fontWeight = FontWeight.Normal,
+                maxLines = 2,
+                softWrap = true,
+                overflow = TextOverflow.Ellipsis,
+                onTextLayout = { layoutResult ->
+                    if (layoutResult.hasVisualOverflow && textScale > 0.78f) {
+                        textScale = (textScale - 0.06f).coerceAtLeast(0.78f)
+                    }
+                },
+                modifier = Modifier.testTag("home_global_counter_subtitle")
+            )
+        }
     }
 }
 
@@ -676,6 +710,7 @@ fun GlobalCounterTopLeftBlock(
 private fun UpdateBadgeIconButton(
     onClick: () -> Unit
 ) {
+    val palette = AppThemeColors.palette
     IconButton(
         onClick = onClick,
         modifier = Modifier
@@ -686,7 +721,7 @@ private fun UpdateBadgeIconButton(
             Icon(
                 imageVector = Icons.Outlined.SystemUpdate,
                 contentDescription = "Update available",
-                tint = PureBlack,
+                tint = palette.onCanvas,
                 modifier = Modifier
                     .size(22.dp)
                     .align(Alignment.Center)
@@ -695,8 +730,8 @@ private fun UpdateBadgeIconButton(
                 modifier = Modifier
                     .size(8.dp)
                     .align(Alignment.TopEnd)
-                    .background(PureBlack, CircleShape)
-                    .border(1.5.dp, PureWhite, CircleShape)
+                    .background(palette.accent, CircleShape)
+                    .border(1.5.dp, palette.canvasBackground, CircleShape)
             )
         }
     }
@@ -707,6 +742,7 @@ private fun AnimatedArabicGreeting(
     reduceMotion: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val palette = AppThemeColors.palette
     val clusterEnds = remember { arabicGraphemeEndIndices(ARABIC_GREETING) }
     var visibleClusters by remember(reduceMotion) {
         mutableIntStateOf(if (reduceMotion) clusterEnds.size else 0)
@@ -745,47 +781,47 @@ private fun AnimatedArabicGreeting(
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         BoxWithConstraints(modifier = modifier) {
-            var greetingFontSizeSp by remember(maxWidth) { mutableFloatStateOf(22f) }
+            var greetingFontSizeSp by remember(maxWidth) { mutableFloatStateOf(HOME_AYAT_BASE_FONT_SIZE_SP) }
             val currentStyle = MaterialTheme.typography.headlineMedium.copy(
                 fontSize = greetingFontSizeSp.sp,
-                lineHeight = (greetingFontSizeSp * 1.45f).sp,
-                textAlign = TextAlign.Center,
+                lineHeight = (greetingFontSizeSp * 1.4f).sp,
+                textAlign = TextAlign.Right,
                 textDirection = TextDirection.Rtl
             )
-            Text(
-                text = ARABIC_GREETING,
-                style = currentStyle,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                softWrap = true,
-                overflow = TextOverflow.Clip,
-                color = PureBlack,
-                fontWeight = FontWeight.SemiBold,
-                onTextLayout = { layoutResult ->
-                    if ((layoutResult.hasVisualOverflow || layoutResult.lineCount > 2) && greetingFontSizeSp > 12f) {
-                        greetingFontSizeSp = (greetingFontSizeSp - 1f).coerceAtLeast(12f)
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .alpha(0f)
-            )
-            Text(
-                text = displayedGreeting,
-                style = currentStyle,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                softWrap = true,
-                overflow = TextOverflow.Clip,
-                color = PureBlack,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .graphicsLayer {
-                        alpha = greetingAlpha.value
-                    }
-                    .testTag("home_arabic_greeting")
-            )
+            Box(contentAlignment = Alignment.CenterEnd) {
+                Text(
+                    text = ARABIC_GREETING,
+                    style = currentStyle,
+                    textAlign = TextAlign.Right,
+                    maxLines = 2,
+                    softWrap = true,
+                    overflow = TextOverflow.Clip,
+                    color = palette.onCanvas,
+                    fontWeight = FontWeight.SemiBold,
+                    onTextLayout = { layoutResult ->
+                        if ((layoutResult.hasVisualOverflow || layoutResult.lineCount > 2) && greetingFontSizeSp > 11f) {
+                            greetingFontSizeSp = (greetingFontSizeSp - 1f).coerceAtLeast(11f)
+                        }
+                    },
+                    modifier = Modifier.alpha(0f)
+                )
+                Text(
+                    text = displayedGreeting,
+                    style = currentStyle,
+                    textAlign = TextAlign.Right,
+                    maxLines = 2,
+                    softWrap = true,
+                    overflow = TextOverflow.Clip,
+                    color = palette.onCanvas,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .matchParentSize()
+                        .graphicsLayer {
+                            alpha = greetingAlpha.value
+                        }
+                        .testTag("home_arabic_greeting")
+                )
+            }
         }
     }
 }
@@ -804,6 +840,7 @@ internal fun AppUpdateDialog(
     onDismiss: () -> Unit,
     onCancelDownload: () -> Unit
 ) {
+    val palette = AppThemeColors.palette
     val busy = isPreparing || isDownloading
     val canDismiss = !update.isForced && !busy
     AlertDialog(
@@ -816,16 +853,16 @@ internal fun AppUpdateDialog(
             dismissOnBackPress = canDismiss,
             dismissOnClickOutside = canDismiss
         ),
-        containerColor = PureWhite,
+        containerColor = palette.cardSurface,
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier
-            .border(1.dp, PureBlack, RoundedCornerShape(16.dp))
+            .border(1.dp, palette.strongBorder, RoundedCornerShape(16.dp))
             .testTag("app_update_dialog"),
         title = {
             Text(
                 text = "Version ${update.versionName} is available",
                 style = MaterialTheme.typography.titleLarge,
-                color = PureBlack,
+                color = palette.onCard,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.testTag("update_dialog_title")
             )
@@ -836,7 +873,7 @@ internal fun AppUpdateDialog(
                     Text(
                         text = update.changelog,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = PureBlack,
+                        color = palette.onCard,
                         modifier = Modifier.testTag("update_dialog_changelog")
                     )
                 }
@@ -844,7 +881,7 @@ internal fun AppUpdateDialog(
                     Text(
                         text = "This update contains a critical data-safety or bug fix and is required to continue.",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = SubtextGrey,
+                        color = palette.onCardSubtext,
                         modifier = Modifier.testTag("update_dialog_forced_notice")
                     )
                 }
@@ -852,16 +889,16 @@ internal fun AppUpdateDialog(
                     if (downloadProgress != null && isDownloading) {
                         LinearProgressIndicator(
                             progress = { downloadProgress },
-                            color = PureBlack,
-                            trackColor = TrackGrey,
+                            color = palette.accent,
+                            trackColor = palette.track,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("update_download_progress_bar")
                         )
                     } else {
                         LinearProgressIndicator(
-                            color = PureBlack,
-                            trackColor = TrackGrey,
+                            color = palette.accent,
+                            trackColor = palette.track,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("update_download_progress_bar")
@@ -874,7 +911,7 @@ internal fun AppUpdateDialog(
                             "Downloading update..."
                         },
                         style = MaterialTheme.typography.labelMedium,
-                        color = SubtextGrey,
+                        color = palette.onCardSubtext,
                         modifier = Modifier.testTag("update_download_status_text")
                     )
                 }
@@ -882,22 +919,22 @@ internal fun AppUpdateDialog(
                     Text(
                         text = "Download complete. Allow 'Install unknown apps' for 1 Crore once in Settings so Android can install this update.",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = PureBlack,
+                        color = palette.onCard,
                         modifier = Modifier.testTag("update_install_permission_notice")
                     )
                 }
                 if (errorMessage != null) {
                     Surface(
-                        color = OffWhite,
+                        color = palette.subtleSurface,
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .border(1.dp, PureBlack, RoundedCornerShape(8.dp))
+                            .border(1.dp, palette.error, RoundedCornerShape(8.dp))
                     ) {
                         Text(
                             text = errorMessage,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = PureBlack,
+                            color = palette.onCard,
                             modifier = Modifier
                                 .padding(10.dp)
                                 .testTag("update_error_banner")
@@ -914,7 +951,7 @@ internal fun AppUpdateDialog(
                             onClick = onCancelDownload,
                             modifier = Modifier.testTag("update_cancel_download_button")
                         ) {
-                            Text("Cancel", color = SubtextGrey)
+                            Text("Cancel", color = palette.onCardSubtext)
                         }
                     } else {
                         TextButton(
@@ -922,7 +959,7 @@ internal fun AppUpdateDialog(
                             enabled = !isPreparing,
                             modifier = Modifier.testTag("update_later_button")
                         ) {
-                            Text("Later", color = SubtextGrey)
+                            Text("Later", color = palette.onCardSubtext)
                         }
                     }
                 }
@@ -949,6 +986,7 @@ private fun HomeCustomCounterRow(
     counter: CustomCounterEntity,
     onClick: () -> Unit
 ) {
+    val palette = AppThemeColors.palette
     val ratio = (counter.currentCount.toDouble() / counter.targetCount.coerceAtLeast(1L).toDouble())
         .toFloat()
         .coerceIn(0f, 1f)
@@ -971,7 +1009,7 @@ private fun HomeCustomCounterRow(
             Text(
                 text = counter.name,
                 style = MaterialTheme.typography.titleMedium,
-                color = PureBlack,
+                color = palette.onCard,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -981,7 +1019,7 @@ private fun HomeCustomCounterRow(
             Text(
                 text = "${formatNumber(counter.currentCount)} / ${formatNumber(counter.targetCount)} · $pct",
                 style = MaterialTheme.typography.labelMedium,
-                color = SubtextGrey
+                color = palette.onCardSubtext
             )
         }
         Box(
@@ -989,13 +1027,13 @@ private fun HomeCustomCounterRow(
                 .fillMaxWidth()
                 .height(4.dp)
                 .clip(RoundedCornerShape(999.dp))
-                .background(TrackGrey)
+                .background(palette.track)
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth(ratio.coerceAtLeast(if (counter.currentCount > 0L) 0.01f else 0f))
                     .fillMaxHeight()
-                    .background(PureBlack, RoundedCornerShape(999.dp))
+                    .background(palette.accent, RoundedCornerShape(999.dp))
             )
         }
     }
@@ -1007,12 +1045,13 @@ fun FloatingButtonHomeToggleRow(
     onToggle: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val palette = AppThemeColors.palette
     Surface(
-        color = PureWhite,
+        color = palette.cardSurface,
         shape = RoundedCornerShape(16.dp),
         modifier = modifier
             .fillMaxWidth()
-            .border(1.dp, HairlineGrey, RoundedCornerShape(16.dp))
+            .border(1.dp, palette.hairline, RoundedCornerShape(16.dp))
             .clickable(role = Role.Switch, onClick = onToggle)
             .semantics {
                 contentDescription = "Floating button"
@@ -1038,7 +1077,7 @@ fun FloatingButtonHomeToggleRow(
                     modifier = Modifier
                         .size(36.dp)
                         .clip(CircleShape)
-                        .background(PureBlack)
+                        .background(palette.accent)
                 ) {
                     SmallOneCroreLogoGlyph(modifier = Modifier.size(20.dp))
                 }
@@ -1046,13 +1085,13 @@ fun FloatingButtonHomeToggleRow(
                     Text(
                         text = "Floating button",
                         style = MaterialTheme.typography.titleMedium,
-                        color = PureBlack,
+                        color = palette.onCard,
                         fontWeight = FontWeight.Medium
                     )
                     Text(
                         text = "Count Durood over WhatsApp or any app",
                         style = MaterialTheme.typography.labelSmall,
-                        color = SubtextGrey
+                        color = palette.onCardSubtext
                     )
                 }
             }
@@ -1060,12 +1099,12 @@ fun FloatingButtonHomeToggleRow(
             Spacer(modifier = Modifier.width(12.dp))
 
             Surface(
-                color = if (isEnabled) PureBlack else PureWhite,
+                color = if (isEnabled) palette.accent else palette.cardSurface,
                 shape = RoundedCornerShape(999.dp),
                 modifier = Modifier
                     .border(
                         width = 1.dp,
-                        color = if (isEnabled) PureBlack else HairlineGrey,
+                        color = if (isEnabled) palette.accent else palette.hairline,
                         shape = RoundedCornerShape(999.dp)
                     )
                     .clickable(onClick = onToggle)
@@ -1074,7 +1113,7 @@ fun FloatingButtonHomeToggleRow(
                 Text(
                     text = if (isEnabled) "ON" else "OFF",
                     style = MaterialTheme.typography.labelMedium,
-                    color = if (isEnabled) PureWhite else PureBlack,
+                    color = if (isEnabled) palette.onAccent else palette.onCard,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
                 )
@@ -1090,6 +1129,7 @@ private fun HomeMetricCell(
     subtext: String,
     modifier: Modifier = Modifier
 ) {
+    val palette = AppThemeColors.palette
     Column(
         modifier = modifier.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -1097,18 +1137,18 @@ private fun HomeMetricCell(
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = SubtextGrey
+            color = palette.onCardSubtext
         )
         Text(
             text = value,
             style = MaterialTheme.typography.titleMedium,
-            color = PureBlack,
+            color = palette.onCard,
             fontWeight = FontWeight.Bold
         )
         Text(
             text = subtext,
             style = MaterialTheme.typography.labelMedium,
-            color = SubtextGrey
+            color = palette.onCardSubtext
         )
     }
 }
@@ -1119,18 +1159,19 @@ internal fun ShareChoiceDialog(
     onSelectProgressCard: () -> Unit,
     onSelectSimpleProgress: () -> Unit
 ) {
+    val palette = AppThemeColors.palette
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = PureWhite,
+        containerColor = palette.cardSurface,
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier
-            .border(1.dp, PureBlack, RoundedCornerShape(16.dp))
+            .border(1.dp, palette.strongBorder, RoundedCornerShape(16.dp))
             .testTag("share_choice_dialog"),
         title = {
             Text(
                 text = "Share",
                 style = MaterialTheme.typography.titleMedium,
-                color = PureBlack,
+                color = palette.onCard,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.testTag("share_choice_dialog_title")
             )
@@ -1161,7 +1202,7 @@ internal fun ShareChoiceDialog(
                 onClick = onDismiss,
                 modifier = Modifier.testTag("share_choice_cancel_button")
             ) {
-                Text("Cancel", color = SubtextGrey)
+                Text("Cancel", color = palette.onCardSubtext)
             }
         }
     )

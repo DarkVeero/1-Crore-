@@ -41,6 +41,11 @@
           "type": "boolean",
           "description": "Whether daily reminders are enabled."
         },
+        "themeMode": {
+          "type": "string",
+          "enum": ["bw", "red"],
+          "description": "Selected app theme mode ('bw' default or 'red')."
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time",

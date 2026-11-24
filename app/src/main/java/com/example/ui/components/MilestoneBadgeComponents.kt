@@ -54,12 +54,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.badges.MilestoneBadge
 import com.example.badges.MilestoneBadgeManager
 import com.example.badges.MilestoneBadgeProgress
-import com.example.ui.theme.HairlineGrey
-import com.example.ui.theme.OffWhite
-import com.example.ui.theme.PureBlack
-import com.example.ui.theme.PureWhite
-import com.example.ui.theme.SubtextGrey
-import com.example.ui.theme.TrackGrey
+import com.example.ui.theme.AppThemeColors
 
 @Composable
 fun HomeMilestoneBadgeCard(
@@ -67,14 +62,15 @@ fun HomeMilestoneBadgeCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val palette = AppThemeColors.palette
     val latest = progress.latestEarnedBadge
     val next = progress.nextBadge
     Surface(
-        color = PureWhite,
+        color = palette.cardSurface,
         shape = RoundedCornerShape(16.dp),
         modifier = modifier
             .fillMaxWidth()
-            .border(1.dp, HairlineGrey, RoundedCornerShape(16.dp))
+            .border(1.dp, palette.hairline, RoundedCornerShape(16.dp))
             .clip(RoundedCornerShape(16.dp))
             .clickable(role = Role.Button, onClick = onClick)
             .testTag("home_milestone_badges_card")
@@ -94,21 +90,21 @@ fun HomeMilestoneBadgeCard(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
                         .size(42.dp)
-                        .background(if (latest != null) PureBlack else OffWhite, RoundedCornerShape(10.dp))
-                        .border(1.dp, if (latest != null) PureBlack else HairlineGrey, RoundedCornerShape(10.dp))
+                        .background(if (latest != null) palette.accent else palette.subtleSurface, RoundedCornerShape(10.dp))
+                        .border(1.dp, if (latest != null) palette.accent else palette.hairline, RoundedCornerShape(10.dp))
                 ) {
                     if (latest != null) {
                         Text(
                             text = "#${latest.tier}",
                             style = MaterialTheme.typography.labelLarge,
-                            color = PureWhite,
+                            color = palette.onAccent,
                             fontWeight = FontWeight.Bold
                         )
                     } else {
                         Icon(
                             imageVector = Icons.Outlined.MilitaryTech,
                             contentDescription = "Milestone badges",
-                            tint = PureBlack,
+                            tint = palette.onCard,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -122,18 +118,18 @@ fun HomeMilestoneBadgeCard(
                         Text(
                             text = "MILESTONE BADGES",
                             style = MaterialTheme.typography.labelSmall,
-                            color = SubtextGrey
+                            color = palette.onCardSubtext
                         )
                         Surface(
-                            color = if (progress.earnedCount > 0) PureBlack else OffWhite,
+                            color = if (progress.earnedCount > 0) palette.accent else palette.subtleSurface,
                             shape = RoundedCornerShape(999.dp),
                             modifier = Modifier
-                                .border(1.dp, if (progress.earnedCount > 0) PureBlack else HairlineGrey, RoundedCornerShape(999.dp))
+                                .border(1.dp, if (progress.earnedCount > 0) palette.accent else palette.hairline, RoundedCornerShape(999.dp))
                         ) {
                             Text(
                                 text = "${progress.earnedCount} / ${progress.totalBadges}",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = if (progress.earnedCount > 0) PureWhite else PureBlack,
+                                color = if (progress.earnedCount > 0) palette.onAccent else palette.onCard,
                                 fontWeight = FontWeight.SemiBold,
                                 maxLines = 1,
                                 modifier = Modifier
@@ -150,7 +146,7 @@ fun HomeMilestoneBadgeCard(
                             "Earn a badge every 50,000 Durood"
                         },
                         style = MaterialTheme.typography.bodyMedium,
-                        color = PureBlack,
+                        color = palette.onCard,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -161,7 +157,7 @@ fun HomeMilestoneBadgeCard(
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = "Open all milestone badges in Stats",
-                    tint = PureBlack,
+                    tint = palette.onCard,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -170,7 +166,7 @@ fun HomeMilestoneBadgeCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(5.dp)
-                    .background(TrackGrey, RoundedCornerShape(999.dp))
+                    .background(palette.track, RoundedCornerShape(999.dp))
             ) {
                 Box(
                     modifier = Modifier
@@ -180,7 +176,7 @@ fun HomeMilestoneBadgeCard(
                             )
                         )
                         .fillMaxHeight()
-                        .background(PureBlack, RoundedCornerShape(999.dp))
+                        .background(palette.accent, RoundedCornerShape(999.dp))
                 )
             }
 
@@ -196,12 +192,12 @@ fun HomeMilestoneBadgeCard(
                         "All 200 badges completed (1 Crore)"
                     },
                     style = MaterialTheme.typography.labelMedium,
-                    color = SubtextGrey
+                    color = palette.onCardSubtext
                 )
                 Text(
                     text = "Stats",
                     style = MaterialTheme.typography.labelMedium,
-                    color = PureBlack,
+                    color = palette.onCard,
                     fontWeight = FontWeight.Medium
                 )
             }
@@ -214,6 +210,7 @@ fun StatsMilestoneBadgesSection(
     progress: MilestoneBadgeProgress,
     modifier: Modifier = Modifier
 ) {
+    val palette = AppThemeColors.palette
     var showAll200 by rememberSaveable { mutableStateOf(false) }
 
     val displayedBadges = remember(progress.earnedCount, showAll200) {
@@ -238,11 +235,11 @@ fun StatsMilestoneBadgesSection(
     }
 
     Surface(
-        color = PureWhite,
+        color = palette.cardSurface,
         shape = RoundedCornerShape(16.dp),
         modifier = modifier
             .fillMaxWidth()
-            .border(1.dp, HairlineGrey, RoundedCornerShape(16.dp))
+            .border(1.dp, palette.hairline, RoundedCornerShape(16.dp))
             .testTag("stats_milestone_badges_section")
     ) {
         Column(
@@ -260,23 +257,23 @@ fun StatsMilestoneBadgesSection(
                     Text(
                         text = "MILESTONE BADGES",
                         style = MaterialTheme.typography.labelSmall,
-                        color = SubtextGrey
+                        color = palette.onCardSubtext
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = "Every 50,000 Durood up to 1 Crore",
                         style = MaterialTheme.typography.bodySmall,
-                        color = SubtextGrey
+                        color = palette.onCardSubtext
                     )
                 }
                 Surface(
-                    color = PureBlack,
+                    color = palette.accent,
                     shape = RoundedCornerShape(999.dp)
                 ) {
                     Text(
                         text = "${progress.earnedCount} / ${progress.totalBadges}",
                         style = MaterialTheme.typography.labelMedium,
-                        color = PureWhite,
+                        color = palette.onAccent,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         modifier = Modifier
@@ -291,7 +288,7 @@ fun StatsMilestoneBadgesSection(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(6.dp)
-                        .background(TrackGrey, RoundedCornerShape(999.dp))
+                        .background(palette.track, RoundedCornerShape(999.dp))
                 ) {
                     Box(
                         modifier = Modifier
@@ -301,7 +298,7 @@ fun StatsMilestoneBadgesSection(
                                 )
                             )
                             .fillMaxHeight()
-                            .background(PureBlack, RoundedCornerShape(999.dp))
+                            .background(palette.accent, RoundedCornerShape(999.dp))
                     )
                 }
                 Text(
@@ -311,11 +308,11 @@ fun StatsMilestoneBadgesSection(
                         "الْحَمْدُ لِلَّهِ! All 200 badges earned!"
                     },
                     style = MaterialTheme.typography.labelMedium,
-                    color = SubtextGrey
+                    color = palette.onCardSubtext
                 )
             }
 
-            HorizontalDivider(color = HairlineGrey, thickness = 1.dp)
+            HorizontalDivider(color = palette.hairline, thickness = 1.dp)
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 displayedBadges.chunked(4).forEach { rowBadges ->
@@ -355,13 +352,14 @@ private fun BadgeGridTile(
     isEarned: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val palette = AppThemeColors.palette
     Surface(
-        color = if (isEarned) PureBlack else OffWhite,
+        color = if (isEarned) palette.accent else palette.subtleSurface,
         shape = RoundedCornerShape(10.dp),
         modifier = modifier
             .border(
                 width = 1.dp,
-                color = if (isEarned) PureBlack else HairlineGrey,
+                color = if (isEarned) palette.accent else palette.hairline,
                 shape = RoundedCornerShape(10.dp)
             )
             .semantics(mergeDescendants = true) {}
@@ -378,7 +376,7 @@ private fun BadgeGridTile(
                 Text(
                     text = "#${badge.tier}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = PureWhite.copy(alpha = 0.78f),
+                    color = palette.onAccent.copy(alpha = 0.78f),
                     maxLines = 1
                 )
             } else {
@@ -389,13 +387,13 @@ private fun BadgeGridTile(
                     Icon(
                         imageVector = Icons.Outlined.Lock,
                         contentDescription = null,
-                        tint = SubtextGrey,
+                        tint = palette.onCardSubtext,
                         modifier = Modifier.size(10.dp)
                     )
                     Text(
                         text = "#${badge.tier}",
                         style = MaterialTheme.typography.labelSmall,
-                        color = SubtextGrey,
+                        color = palette.onCardSubtext,
                         maxLines = 1
                     )
                 }
@@ -403,7 +401,7 @@ private fun BadgeGridTile(
             Text(
                 text = MilestoneBadgeManager.formatCompactChipLabel(badge.threshold),
                 style = MaterialTheme.typography.labelMedium,
-                color = if (isEarned) PureWhite else PureBlack,
+                color = if (isEarned) palette.onAccent else palette.onCard,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 maxLines = 1
@@ -418,6 +416,7 @@ fun MilestoneBadgeCelebrationDialog(
     earnedCount: Int,
     onDismiss: () -> Unit
 ) {
+    val palette = AppThemeColors.palette
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
@@ -429,19 +428,19 @@ fun MilestoneBadgeCelebrationDialog(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(PureBlack.copy(alpha = 0.45f))
+                .background(palette.scrim)
                 .pointerInput(Unit) { detectTapGestures { onDismiss() } }
                 .testTag("milestone_badge_celebration_dialog"),
             contentAlignment = Alignment.Center
         ) {
             Surface(
-                color = PureWhite,
+                color = palette.cardSurface,
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .padding(horizontal = 24.dp)
                     .widthIn(max = 400.dp)
                     .fillMaxWidth()
-                    .border(1.dp, PureBlack, RoundedCornerShape(16.dp))
+                    .border(1.dp, palette.strongBorder, RoundedCornerShape(16.dp))
                     .pointerInput(Unit) { detectTapGestures { } }
             ) {
                 Column(
@@ -457,13 +456,13 @@ fun MilestoneBadgeCelebrationDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Surface(
-                            color = PureBlack,
+                            color = palette.accent,
                             shape = RoundedCornerShape(999.dp)
                         ) {
                             Text(
                                 text = "BADGE #${badge.tier} OF 200",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = PureWhite,
+                                color = palette.onAccent,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                             )
@@ -477,7 +476,7 @@ fun MilestoneBadgeCelebrationDialog(
                             Icon(
                                 imageVector = Icons.Filled.Close,
                                 contentDescription = "Close badge celebration",
-                                tint = PureBlack,
+                                tint = palette.onCard,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -487,20 +486,20 @@ fun MilestoneBadgeCelebrationDialog(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
                             .size(76.dp)
-                            .background(PureBlack, CircleShape)
-                            .border(2.dp, PureBlack, CircleShape)
+                            .background(palette.accent, CircleShape)
+                            .border(2.dp, palette.accent, CircleShape)
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 text = MilestoneBadgeManager.formatCompactChipLabel(badge.threshold),
                                 style = MaterialTheme.typography.titleMedium,
-                                color = PureWhite,
+                                color = palette.onAccent,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
                                 text = "TIER ${badge.tier}",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = PureWhite.copy(alpha = 0.78f)
+                                color = palette.onAccent.copy(alpha = 0.78f)
                             )
                         }
                     }
@@ -508,16 +507,16 @@ fun MilestoneBadgeCelebrationDialog(
                     Text(
                         text = "${badge.title} Unlocked!",
                         style = MaterialTheme.typography.titleLarge,
-                        color = PureBlack,
+                        color = palette.onCard,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.testTag("milestone_badge_dialog_title")
                     )
 
                     Text(
-                        text = "الْحَمْدُ لِلَّهِ! You have crossed ${badge.subtitle}. Earned $earnedCount of ${MilestoneBadgeManager.TOTAL_BADGES} monochrome badges.",
+                        text = "الْحَمْدُ لِلَّهِ! You have crossed ${badge.subtitle}. Earned $earnedCount of ${MilestoneBadgeManager.TOTAL_BADGES} badges.",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = SubtextGrey,
+                        color = palette.onCardSubtext,
                         textAlign = TextAlign.Center
                     )
 

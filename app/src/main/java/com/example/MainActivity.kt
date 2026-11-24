@@ -8,14 +8,18 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.announcements.AnnouncementLaunchRequest
 import com.example.announcements.AnnouncementNotificationHelper
 import com.example.ui.AppNavigation
 import com.example.ui.auth.extractVerificationOobCode
+import com.example.ui.theme.AppThemeMode
 import com.example.ui.theme.OneCroreTheme
+import com.example.ui.theme.ThemePreferenceStore
 import com.example.widget.OneCroreWidgetProvider
 
 class MainActivity : ComponentActivity() {
@@ -30,15 +34,33 @@ class MainActivity : ComponentActivity() {
             }
         }
         super.onCreate(savedInstanceState)
+        val initialTheme = ThemePreferenceStore.reloadFromDevicePrefs(this)
         pendingVerificationCode = extractVerificationOobCode(intent?.data)
         pendingWidgetAction = intent?.getStringExtra(OneCroreWidgetProvider.EXTRA_WIDGET_ACTION)
         pendingAnnouncementRequest = AnnouncementNotificationHelper.extractLaunchRequestFromIntent(intent)
+        val initialBarStyle = if (initialTheme == AppThemeMode.RED) {
+            SystemBarStyle.dark(Color.TRANSPARENT)
+        } else {
+            SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+        }
         enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+            statusBarStyle = initialBarStyle,
+            navigationBarStyle = initialBarStyle
         )
         setContent {
-            OneCroreTheme {
+            val activeTheme by ThemePreferenceStore.themeModeFlow(this).collectAsStateWithLifecycle()
+            LaunchedEffect(activeTheme) {
+                val barStyle = if (activeTheme == AppThemeMode.RED) {
+                    SystemBarStyle.dark(Color.TRANSPARENT)
+                } else {
+                    SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+                }
+                enableEdgeToEdge(
+                    statusBarStyle = barStyle,
+                    navigationBarStyle = barStyle
+                )
+            }
+            OneCroreTheme(themeMode = activeTheme) {
                 AppNavigation(
                     pendingVerificationCode = pendingVerificationCode,
                     onConsumeVerificationCode = { pendingVerificationCode = null },

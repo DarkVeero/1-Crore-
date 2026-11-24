@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -113,6 +114,7 @@ class ExampleRobolectricTest {
         com.example.groups.GroupRepository.resetForTest(context)
         com.example.groups.GroupCelebrationStore.resetForTest(context)
         com.example.update.AppUpdateManager.resetShareStateForTest(context)
+        com.example.ui.theme.ThemePreferenceStore.resetForTest(context)
         runBlocking { ReminderScheduler.resetForTest(context) }
         db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
             .allowMainThreadQueries()
@@ -132,6 +134,7 @@ class ExampleRobolectricTest {
         com.example.groups.GroupRepository.resetForTest(context)
         com.example.groups.GroupCelebrationStore.resetForTest(context)
         com.example.update.AppUpdateManager.resetShareStateForTest(context)
+        com.example.ui.theme.ThemePreferenceStore.resetForTest(context)
         runBlocking { ReminderScheduler.resetForTest(context) }
         db.close()
     }
@@ -7384,4 +7387,1201 @@ class ExampleRobolectricTest {
             vmStore.clear()
         }
     }
+
+    @Test
+    fun fixRun13Task2_test3_deleteWithConfirmRemovesOnlyThatZikr() {
+        val uid = "fix_run13_t3_${System.nanoTime()}"
+        val now = System.currentTimeMillis()
+        val istighfarId = "custom_istighfar_1"
+        val subhanId = "custom_subhan_2"
+
+        runBlocking {
+            db.userProfileDao().upsertProfile(
+                UserProfileEntity(userId = uid, displayName = "Bilal", dailyTarget = 2600, setupCompleted = true)
+            )
+            db.customCounterDao().upsertCounter(
+                CustomCounterEntity(
+                    id = istighfarId, userId = uid, name = "Istighfar",
+                    targetCount = 1_000L, currentCount = 345L,
+                    pendingSync = false, isDeleted = false,
+                    createdAtMillis = now - 10_000L, updatedAtMillis = now - 10_000L
+                )
+            )
+            db.customCounterDao().upsertCounter(
+                CustomCounterEntity(
+                    id = subhanId, userId = uid, name = "SubhanAllah",
+                    targetCount = 3_300L, currentCount = 700L,
+                    pendingSync = false, isDeleted = false,
+                    createdAtMillis = now - 20_000L, updatedAtMillis = now - 20_000L
+                )
+            )
+        }
+
+        val auth = FirebaseAuth.getInstance().apply { signOut() }
+        val repo = DuroodRepository(db, FirebaseFirestore.getInstance(), auth)
+        val vm = com.example.ui.MainViewModel(repo, uid, "Bilal", now - 86_400_000L, context)
+        val vmStore = androidx.lifecycle.ViewModelStore().apply { put("vm_t3", vm) }
+        var latestState by mutableStateOf<MainUiState?>(null)
+        val job = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main.immediate).launch {
+            vm.uiState.collect { latestState = it }
+        }
+
+        try {
+            val deadline = System.currentTimeMillis() + 2_000L
+            while ((latestState?.customCounters?.size ?: 0) != 2 && System.currentTimeMillis() < deadline) {
+                org.robolectric.shadows.ShadowLooper.idleMainLooper()
+                Thread.sleep(10L)
+            }
+
+            composeTestRule.setContent {
+                OneCroreTheme {
+                    com.example.ui.screens.CustomCountersScreen(
+                        uiState = latestState ?: MainUiState(isLoading = false),
+                        onBack = {},
+                        onOpenCounter = {},
+                        onCreateCounter = { _, _ -> },
+                        onUpdateCounter = { _, _, _, _ -> },
+                        onDeleteCounter = vm::onDeleteCustomCounter
+                    )
+                }
+            }
+            composeTestRule.waitForIdle()
+
+            composeTestRule.onNodeWithTag("custom_counter_rename_$istighfarId").assertIsDisplayed()
+            composeTestRule.onNodeWithTag("custom_counter_delete_$istighfarId").performClick()
+            composeTestRule.waitForIdle()
+
+            composeTestRule.onNodeWithTag("delete_custom_counter_dialog").assertIsDisplayed()
+            composeTestRule.onNodeWithTag("delete_custom_counter_name").assertTextEquals("Istighfar")
+            composeTestRule.onNodeWithTag("delete_custom_counter_count").assertTextEquals("Total count: 345")
+            composeTestRule.onNodeWithTag("delete_custom_counter_warning")
+                .assertTextEquals("This will permanently delete this zikr and its counts")
+
+            composeTestRule.onNodeWithTag("confirm_delete_custom_counter").performClick()
+
+            val deleteDeadline = System.currentTimeMillis() + 2_000L
+            while (latestState?.customCounters?.any { it.id == istighfarId } == true &&
+                System.currentTimeMillis() < deleteDeadline
+            ) {
+                org.robolectric.shadows.ShadowLooper.idleMainLooper()
+                Thread.sleep(10L)
+            }
+            composeTestRule.waitForIdle()
+
+            assertEquals(0, composeTestRule.onAllNodesWithTag("delete_custom_counter_dialog").fetchSemanticsNodes().size)
+            composeTestRule.onNodeWithTag("custom_counters_back_button").assertIsDisplayed()
+            assertEquals(0, composeTestRule.onAllNodesWithTag("custom_counter_card_$istighfarId").fetchSemanticsNodes().size)
+            composeTestRule.onNodeWithTag("custom_counter_card_$subhanId").assertIsDisplayed()
+
+            val activeAfter = runBlocking { db.customCounterDao().getActiveCounters(uid) }
+            assertEquals(listOf(subhanId), activeAfter.map { it.id })
+            assertEquals(700L, activeAfter.single().currentCount)
+            val deletedRow = runBlocking { db.customCounterDao().getCounter(istighfarId) }
+            assertTrue(deletedRow?.isDeleted == true)
+        } finally {
+            job.cancel()
+            vmStore.clear()
+        }
+    }
+
+    @Test
+    fun fixRun13Task2_test4_cancelKeepsZikr() {
+        val uid = "fix_run13_t4_${System.nanoTime()}"
+        val now = System.currentTimeMillis()
+        val istighfarId = "custom_istighfar_cancel"
+
+        runBlocking {
+            db.userProfileDao().upsertProfile(
+                UserProfileEntity(userId = uid, displayName = "Bilal", dailyTarget = 2600, setupCompleted = true)
+            )
+            db.customCounterDao().upsertCounter(
+                CustomCounterEntity(
+                    id = istighfarId, userId = uid, name = "Istighfar",
+                    targetCount = 1_000L, currentCount = 345L,
+                    pendingSync = false, isDeleted = false,
+                    createdAtMillis = now - 10_000L, updatedAtMillis = now - 10_000L
+                )
+            )
+        }
+
+        val auth = FirebaseAuth.getInstance().apply { signOut() }
+        val repo = DuroodRepository(db, FirebaseFirestore.getInstance(), auth)
+        val vm = com.example.ui.MainViewModel(repo, uid, "Bilal", now - 86_400_000L, context)
+        val vmStore = androidx.lifecycle.ViewModelStore().apply { put("vm_t4", vm) }
+        var latestState by mutableStateOf<MainUiState?>(null)
+        val job = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main.immediate).launch {
+            vm.uiState.collect { latestState = it }
+        }
+
+        try {
+            val deadline = System.currentTimeMillis() + 2_000L
+            while ((latestState?.customCounters?.size ?: 0) != 1 && System.currentTimeMillis() < deadline) {
+                org.robolectric.shadows.ShadowLooper.idleMainLooper()
+                Thread.sleep(10L)
+            }
+
+            composeTestRule.setContent {
+                OneCroreTheme {
+                    com.example.ui.screens.CustomCountersScreen(
+                        uiState = latestState ?: MainUiState(isLoading = false),
+                        onBack = {},
+                        onOpenCounter = {},
+                        onCreateCounter = { _, _ -> },
+                        onUpdateCounter = { _, _, _, _ -> },
+                        onDeleteCounter = vm::onDeleteCustomCounter
+                    )
+                }
+            }
+            composeTestRule.waitForIdle()
+
+            composeTestRule.onNodeWithTag("custom_counter_delete_$istighfarId").performClick()
+            composeTestRule.waitForIdle()
+            composeTestRule.onNodeWithTag("delete_custom_counter_dialog").assertIsDisplayed()
+
+            composeTestRule.onNodeWithTag("cancel_delete_custom_counter").performClick()
+            composeTestRule.waitForIdle()
+
+            assertEquals(0, composeTestRule.onAllNodesWithTag("delete_custom_counter_dialog").fetchSemanticsNodes().size)
+            composeTestRule.onNodeWithTag("custom_counter_card_$istighfarId").assertIsDisplayed()
+
+            val activeAfter = runBlocking { db.customCounterDao().getActiveCounters(uid) }
+            assertEquals(1, activeAfter.size)
+            assertEquals(345L, activeAfter.single().currentCount)
+            assertFalse(activeAfter.single().isDeleted)
+        } finally {
+            job.cancel()
+            vmStore.clear()
+        }
+    }
+
+    @Test
+    fun fixRun13Task2_test5_mainDuroodTotalAndGroupsUnchangedAfterDelete() {
+        val uid = "fix_run13_t5_${System.nanoTime()}"
+        val todayKey = LocalDate.now().toString()
+        val yesterdayKey = LocalDate.now().minusDays(1).toString()
+        val now = System.currentTimeMillis()
+        val counterId = "custom_salawat_5"
+
+        runBlocking {
+            db.userProfileDao().upsertProfile(
+                UserProfileEntity(
+                    userId = uid,
+                    displayName = "Bilal",
+                    dailyTarget = 2600,
+                    setupCompleted = true,
+                    startedAtMillis = now - 86_400_000L
+                )
+            )
+            db.dailyCountDao().incrementDay(uid, yesterdayKey, 2_600L, now - 86_400_000L)
+            db.dailyCountDao().incrementDay(uid, todayKey, 1_200L, now)
+            db.customCounterDao().upsertCounter(
+                CustomCounterEntity(
+                    id = counterId, userId = uid, name = "Salawat",
+                    targetCount = 5_000L, currentCount = 999L,
+                    pendingSync = false, isDeleted = false,
+                    createdAtMillis = now - 10_000L, updatedAtMillis = now - 10_000L
+                )
+            )
+        }
+
+        val auth = FirebaseAuth.getInstance().apply { signOut() }
+        val repo = DuroodRepository(db, FirebaseFirestore.getInstance(), auth)
+        val vm = com.example.ui.MainViewModel(repo, uid, "Bilal", now - 86_400_000L, context)
+        val vmStore = androidx.lifecycle.ViewModelStore().apply { put("vm_t5", vm) }
+        var latestState by mutableStateOf<MainUiState?>(null)
+        val job = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main.immediate).launch {
+            vm.uiState.collect { latestState = it }
+        }
+
+        try {
+            val deadline = System.currentTimeMillis() + 2_000L
+            while ((latestState == null || latestState?.totalCount != 3_800L || latestState?.customCounters?.size != 1) &&
+                System.currentTimeMillis() < deadline
+            ) {
+                org.robolectric.shadows.ShadowLooper.idleMainLooper()
+                Thread.sleep(10L)
+            }
+            val groupsBefore = latestState?.userGroups
+
+            composeTestRule.runOnUiThread {
+                vm.onDeleteCustomCounter(counterId)
+            }
+
+            val deleteDeadline = System.currentTimeMillis() + 2_000L
+            while (latestState?.customCounters?.isNotEmpty() == true && System.currentTimeMillis() < deleteDeadline) {
+                org.robolectric.shadows.ShadowLooper.idleMainLooper()
+                Thread.sleep(10L)
+            }
+
+            val mainTotalDb = runBlocking { db.dailyCountDao().getTotalCountOnce(uid) }
+            assertEquals(3_800L, mainTotalDb)
+            assertEquals(3_800L, latestState?.totalCount)
+            assertEquals(1_200L, latestState?.todayCount)
+            assertEquals(groupsBefore, latestState?.userGroups)
+            assertTrue(runBlocking { db.customCounterDao().getActiveCounters(uid) }.isEmpty())
+        } finally {
+            job.cancel()
+            vmStore.clear()
+        }
+    }
+
+    @Test
+    fun fixRun13Task1_test1_themeSwitchChangesThemeAndPalette() {
+        // 1. Default theme is Black & White (unchanged from original design)
+        assertEquals(
+            com.example.ui.theme.AppThemeMode.BLACK_AND_WHITE,
+            com.example.ui.theme.ThemePreferenceStore.getCurrentThemeMode(context)
+        )
+        assertEquals(
+            com.example.ui.theme.AppThemeMode.BLACK_AND_WHITE,
+            MainUiState().themeMode
+        )
+
+        // 2. Red theme tokens match spec: Charcoal Black #1C1C1C canvas, Bone White #EDE6D8 cards/text, Barber Red #B3261E accent
+        assertEquals(androidx.compose.ui.graphics.Color(0xFF1C1C1C), com.example.ui.theme.CharcoalBlack)
+        assertEquals(androidx.compose.ui.graphics.Color(0xFFEDE6D8), com.example.ui.theme.BoneWhite)
+        assertEquals(androidx.compose.ui.graphics.Color(0xFFB3261E), com.example.ui.theme.BarberRed)
+        assertEquals(com.example.ui.theme.CharcoalBlack, com.example.ui.theme.RedAppPalette.canvasBackground)
+        assertEquals(com.example.ui.theme.BoneWhite, com.example.ui.theme.RedAppPalette.cardSurface)
+        assertEquals(com.example.ui.theme.BoneWhite, com.example.ui.theme.RedAppPalette.onCanvas)
+        assertEquals(com.example.ui.theme.CharcoalBlack, com.example.ui.theme.RedAppPalette.onCard)
+        assertEquals(com.example.ui.theme.BarberRed, com.example.ui.theme.RedAppPalette.accent)
+
+        var selectedMode by mutableStateOf(com.example.ui.theme.AppThemeMode.BLACK_AND_WHITE)
+        val callbackModes = mutableListOf<com.example.ui.theme.AppThemeMode>()
+        var observedPalette: com.example.ui.theme.AppColorPalette? = null
+        var observedMaterialBg: androidx.compose.ui.graphics.Color? = null
+        var observedMaterialSurface: androidx.compose.ui.graphics.Color? = null
+        var observedMaterialPrimary: androidx.compose.ui.graphics.Color? = null
+
+        composeTestRule.setContent {
+            OneCroreTheme(themeMode = selectedMode) {
+                observedPalette = com.example.ui.theme.AppThemeColors.palette
+                observedMaterialBg = androidx.compose.material3.MaterialTheme.colorScheme.background
+                observedMaterialSurface = androidx.compose.material3.MaterialTheme.colorScheme.surface
+                observedMaterialPrimary = androidx.compose.material3.MaterialTheme.colorScheme.primary
+                com.example.ui.screens.SettingsScreen(
+                    uiState = MainUiState(isLoading = false, themeMode = selectedMode),
+                    onUpdateDisplayName = {},
+                    onUpdatePlan = {},
+                    onUpdateReminders = { _, _, _, _, _ -> },
+                    onUpdateThemeMode = { newMode ->
+                        callbackModes += newMode
+                        selectedMode = newMode
+                    },
+                    onSyncNow = {},
+                    onClearStatusMessage = {},
+                    onExportBackupJson = { "{}" },
+                    onRestoreBackupJson = {},
+                    onDeleteAccount = {},
+                    userEmail = "tester@example.com"
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        // Default Black & White active initially
+        assertEquals(com.example.ui.theme.AppThemeMode.BLACK_AND_WHITE, observedPalette?.themeMode)
+        assertEquals(com.example.ui.theme.PureWhite, observedPalette?.canvasBackground)
+        assertEquals(com.example.ui.theme.PureWhite, observedPalette?.cardSurface)
+        assertEquals(com.example.ui.theme.PureBlack, observedPalette?.accent)
+
+        composeTestRule.onNodeWithTag("settings_theme_selector").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag("settings_theme_bw_option").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("settings_theme_red_option").assertIsDisplayed()
+        assertEquals(
+            true,
+            composeTestRule.onNodeWithTag("settings_theme_bw_option")
+                .fetchSemanticsNode().config[SemanticsProperties.Selected]
+        )
+
+        // Tap Red option -> switches theme & palette live across MaterialTheme and AppThemeColors
+        composeTestRule.onNodeWithTag("settings_theme_red_option").performClick()
+        composeTestRule.waitForIdle()
+
+        assertEquals(listOf(com.example.ui.theme.AppThemeMode.RED), callbackModes)
+        assertEquals(com.example.ui.theme.AppThemeMode.RED, observedPalette?.themeMode)
+        assertEquals(com.example.ui.theme.CharcoalBlack, observedPalette?.canvasBackground)
+        assertEquals(com.example.ui.theme.BoneWhite, observedPalette?.cardSurface)
+        assertEquals(com.example.ui.theme.BoneWhite, observedPalette?.onCanvas)
+        assertEquals(com.example.ui.theme.CharcoalBlack, observedPalette?.onCard)
+        assertEquals(com.example.ui.theme.BarberRed, observedPalette?.accent)
+        assertEquals(com.example.ui.theme.CharcoalBlack, observedMaterialBg)
+        assertEquals(com.example.ui.theme.BoneWhite, observedMaterialSurface)
+        assertEquals(com.example.ui.theme.BarberRed, observedMaterialPrimary)
+        assertEquals(
+            true,
+            composeTestRule.onNodeWithTag("settings_theme_red_option")
+                .fetchSemanticsNode().config[SemanticsProperties.Selected]
+        )
+
+        // Tap Black & White option -> switches cleanly back to default
+        composeTestRule.onNodeWithTag("settings_theme_bw_option").performClick()
+        composeTestRule.waitForIdle()
+
+        assertEquals(com.example.ui.theme.AppThemeMode.BLACK_AND_WHITE, observedPalette?.themeMode)
+        assertEquals(com.example.ui.theme.PureWhite, observedPalette?.canvasBackground)
+        assertEquals(com.example.ui.theme.PureBlack, observedPalette?.accent)
+    }
+
+    @Test
+    fun fixRun13Task1_test2_themeChoicePersistsOnRestartAndSyncsViaFirestore() {
+        val uid = "fix_run13_theme_${System.nanoTime()}"
+        val now = System.currentTimeMillis()
+
+        runBlocking {
+            db.userProfileDao().upsertProfile(
+                UserProfileEntity(
+                    userId = uid,
+                    displayName = "Bilal",
+                    dailyTarget = 2600,
+                    setupCompleted = true,
+                    pendingSync = false,
+                    themeMode = "bw"
+                )
+            )
+        }
+
+        val auth = FirebaseAuth.getInstance().apply { signOut() }
+        val repo = DuroodRepository(db, FirebaseFirestore.getInstance(), auth)
+        val vm1 = com.example.ui.MainViewModel(repo, uid, "Bilal", now - 86_400_000L, context)
+        val store1 = androidx.lifecycle.ViewModelStore().apply { put("vm_theme_1", vm1) }
+        var state1 by mutableStateOf<MainUiState?>(null)
+        val job1 = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main.immediate).launch {
+            vm1.uiState.collect { state1 = it }
+        }
+
+        try {
+            val initDeadline = System.currentTimeMillis() + 2_000L
+            while (state1?.isLoading != false && System.currentTimeMillis() < initDeadline) {
+                org.robolectric.shadows.ShadowLooper.idleMainLooper()
+                Thread.sleep(10L)
+            }
+            assertEquals(com.example.ui.theme.AppThemeMode.BLACK_AND_WHITE, state1?.themeMode)
+
+            // Switch theme via MainViewModel.onUpdateThemeMode(RED)
+            composeTestRule.runOnUiThread {
+                vm1.onUpdateThemeMode(com.example.ui.theme.AppThemeMode.RED)
+            }
+
+            val updateDeadline = System.currentTimeMillis() + 2_000L
+            while ((state1?.themeMode != com.example.ui.theme.AppThemeMode.RED ||
+                    runBlocking { db.userProfileDao().getProfile(uid)?.themeMode } != "red") &&
+                System.currentTimeMillis() < updateDeadline
+            ) {
+                org.robolectric.shadows.ShadowLooper.idleMainLooper()
+                Thread.sleep(10L)
+            }
+
+            assertEquals(com.example.ui.theme.AppThemeMode.RED, state1?.themeMode)
+            assertEquals(
+                com.example.ui.theme.AppThemeMode.RED,
+                com.example.ui.theme.ThemePreferenceStore.getCurrentThemeMode(context)
+            )
+
+            // Room UserProfileEntity persisted themeMode="red" and marked pendingSync=true for Firestore sync
+            val savedProfile = runBlocking { db.userProfileDao().getProfile(uid) }
+            assertNotNull(savedProfile)
+            assertEquals("red", savedProfile?.themeMode)
+            assertTrue("Switching theme must mark profile pendingSync for Firestore cloud push", savedProfile?.pendingSync == true)
+
+            // BackupCodec & FirestoreUserProfile carry themeMode for sync/backup round-trip
+            val firestoreModel = com.example.data.remote.FirestoreUserProfile(userId = uid, themeMode = savedProfile!!.themeMode)
+            assertEquals("red", firestoreModel.themeMode)
+            val decodedBackup = BackupCodec.decode(BackupCodec.encode(savedProfile, emptyList(), emptyList()))
+            assertEquals("red", decodedBackup.themeMode)
+        } finally {
+            job1.cancel()
+            store1.clear()
+        }
+
+        // Simulate app process restart: reload device prefs & create fresh MainViewModel
+        val reloadedMode = com.example.ui.theme.ThemePreferenceStore.reloadFromDevicePrefs(context)
+        assertEquals(com.example.ui.theme.AppThemeMode.RED, reloadedMode)
+
+        val vm2 = com.example.ui.MainViewModel(repo, uid, "Bilal", now - 86_400_000L, context)
+        val store2 = androidx.lifecycle.ViewModelStore().apply { put("vm_theme_2", vm2) }
+        var state2 by mutableStateOf<MainUiState?>(null)
+        val job2 = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main.immediate).launch {
+            vm2.uiState.collect { state2 = it }
+        }
+        try {
+            assertEquals(com.example.ui.theme.AppThemeMode.RED, vm2.uiState.value.themeMode)
+            val restartDeadline = System.currentTimeMillis() + 2_000L
+            while (state2?.isLoading != false && System.currentTimeMillis() < restartDeadline) {
+                org.robolectric.shadows.ShadowLooper.idleMainLooper()
+                Thread.sleep(10L)
+            }
+            assertEquals(com.example.ui.theme.AppThemeMode.RED, state2?.themeMode)
+        } finally {
+            job2.cancel()
+            store2.clear()
+        }
+    }
+
+    @Test
+    fun fixRun14Task1_homeHeader_unitFormattingAndArabicStringUnchanged() {
+        // Exact Ayat string with airaab preserved verbatim
+        assertEquals("صَلُّوا عَلَيْهِ\nوَسَلِّمُوا تَسْلِيمًا", com.example.ui.screens.ARABIC_GREETING)
+        assertEquals(2, com.example.ui.screens.ARABIC_GREETING.lines().size)
+
+        // Global stats wording and number formatting completely untouched (only reads totalCount & userCount)
+        assertEquals("Everyone together: 24,305 Durood", GlobalStatsCache.formatTotalLine(24_305L))
+        assertEquals("16 users", GlobalStatsCache.formatUsersLine(16L))
+        assertEquals(
+            "Updates every hour",
+            GlobalStatsCache.formatSubtitleLine(isOnline = true, fetchedAtMillis = 1_700_000_000_000L)
+        )
+    }
+
+    @Test
+    fun fixRun14Task1_homeHeader_singleTopRowLeftGlobalOppositeRightTwoLineAyatAndTightSpacing() {
+        Settings.Global.putFloat(
+            context.contentResolver,
+            Settings.Global.ANIMATOR_DURATION_SCALE,
+            0f
+        )
+        val now = System.currentTimeMillis()
+        val state = MainUiState(
+            isLoading = false,
+            profile = UserProfileEntity(
+                userId = "fix_run14_u1",
+                displayName = "Rza Official",
+                dailyTarget = 3_000,
+                setupCompleted = true,
+                startedAtMillis = now - 7L * 86_400_000L,
+                lastSyncedAtMillis = now
+            ),
+            totalCount = 5_671L,
+            todayCount = 0L,
+            isOnline = true,
+            globalStats = GlobalCounterStats(
+                totalCount = 24_305L,
+                userCount = 16L,
+                fetchedAtMillis = now - 60_000L
+            )
+        )
+
+        composeTestRule.setContent {
+            OneCroreTheme {
+                Box(modifier = Modifier.width(360.dp)) {
+                    HomeScreen(
+                        uiState = state,
+                        onOpenCounter = {},
+                        onOpenCustomCounter = {},
+                        onCheckForUpdate = {},
+                        onOpenUpdateDialog = {},
+                        onDismissUpdateDialog = {},
+                        onCancelUpdateDownload = {},
+                        onUpdateNow = {}
+                    )
+                }
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        val density = context.resources.displayMetrics.density
+        val headerBounds = composeTestRule.onNodeWithTag("home_header_column").fetchSemanticsNode().boundsInRoot
+        val topRowBounds = composeTestRule.onNodeWithTag("home_header_top_row").fetchSemanticsNode().boundsInRoot
+        val greetingNode = composeTestRule.onNodeWithTag("home_arabic_greeting").fetchSemanticsNode()
+        val greetingBounds = greetingNode.boundsInRoot
+        val globalBounds = composeTestRule.onNodeWithTag("home_global_counter_block").fetchSemanticsNode().boundsInRoot
+        val welcomeRowBounds = composeTestRule.onNodeWithTag("home_welcome_row").fetchSemanticsNode().boundsInRoot
+        val welcomeBounds = composeTestRule.onNodeWithTag("home_welcome_text").fetchSemanticsNode().boundsInRoot
+
+        // 1. Tighter upward spacing: extra top spacer removed, top padding reduced (~12dp), below-header gap ~10dp
+        assertEquals(0, composeTestRule.onAllNodesWithTag("home_header_top_spacer").fetchSemanticsNodes().size)
+        assertTrue(
+            "Expected reduced top inset (<= 15dp, was 30dp before); headerBounds.top=${headerBounds.top / density}dp",
+            headerBounds.top <= 15f * density
+        )
+        val belowHeaderGapDp = (welcomeRowBounds.top - topRowBounds.bottom) / density
+        assertTrue(
+            "Expected compact below-header gap (~10dp, < 14dp), was ${belowHeaderGapDp}dp",
+            belowHeaderGapDp in 7f..14f
+        )
+
+        // 2. Ayat sits on the RIGHT side, right-aligned, in strictly 2 lines
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        greetingNode.config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult]
+            .action
+            ?.invoke(layouts)
+        assertTrue("Expected TextLayoutResult for home_arabic_greeting", layouts.isNotEmpty())
+        assertEquals("Ayat on Home must stay strictly 2 lines", 2, layouts.first().lineCount)
+        assertFalse("Ayat must not clip/overflow horizontally", layouts.first().hasVisualOverflow)
+        assertEquals(
+            androidx.compose.ui.text.style.TextAlign.Right,
+            layouts.first().layoutInput.style.textAlign
+        )
+        assertTrue(
+            "Ayat must align to right edge of header (${greetingBounds.right} vs ${headerBounds.right})",
+            kotlin.math.abs(greetingBounds.right - headerBounds.right) <= 2f * density
+        )
+
+        // 3. Global block sits on LEFT edge in the SAME horizontal row, vertically opposite & centered against Ayat
+        assertTrue(
+            "Global block must align to left margin (${globalBounds.left} vs ${welcomeBounds.left})",
+            kotlin.math.abs(globalBounds.left - welcomeBounds.left) <= 2f * density
+        )
+        assertTrue(
+            "Global block must stay strictly left of Ayat without collision (${globalBounds.right} <= ${greetingBounds.left})",
+            globalBounds.right <= greetingBounds.left + 0.5f
+        )
+        assertTrue(
+            "Global block and Ayat must share the same horizontal row vertically",
+            globalBounds.top < greetingBounds.bottom && greetingBounds.top < globalBounds.bottom
+        )
+        val verticalCenterDiffDp = kotlin.math.abs(
+            ((globalBounds.top + globalBounds.bottom) / 2f) - ((greetingBounds.top + greetingBounds.bottom) / 2f)
+        ) / density
+        assertTrue(
+            "Expected global block vertically centered opposite Ayat (diff=${verticalCenterDiffDp}dp)",
+            verticalCenterDiffDp <= 6f
+        )
+
+        // 4. Global block wording, Welcome, Synced pill, and personal cards below remain untouched
+        composeTestRule.onNodeWithTag("home_global_counter_total")
+            .assertTextEquals("Everyone together: 24,305 Durood")
+        composeTestRule.onNodeWithTag("home_global_counter_users")
+            .assertTextEquals("16 users")
+        composeTestRule.onNodeWithTag("home_global_counter_subtitle")
+            .assertTextEquals("Updates every hour")
+        composeTestRule.onNodeWithTag("home_welcome_text")
+            .assertIsDisplayed()
+            .assertTextEquals("Welcome, Rza Official")
+        composeTestRule.onNodeWithText("Synced · Just now").assertIsDisplayed()
+        composeTestRule.onNodeWithText("TOTAL RECITED").assertIsDisplayed()
+        composeTestRule.onNodeWithText("TODAY VS TARGET").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("DAYS LEFT").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("FINISH DATE").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun fixRun14Task1_homeHeader_noOverlapAtSmallestWidthAndNoStatsKeepsAyatRightAndUpdateNextToWelcome() {
+        Settings.Global.putFloat(
+            context.contentResolver,
+            Settings.Global.ANIMATOR_DURATION_SCALE,
+            0f
+        )
+        val now = System.currentTimeMillis()
+        var currentState by mutableStateOf(
+            MainUiState(
+                isLoading = false,
+                profile = UserProfileEntity(
+                    userId = "fix_run14_u_narrow",
+                    displayName = "Rza Official",
+                    dailyTarget = 3_000,
+                    setupCompleted = true,
+                    startedAtMillis = now - 86_400_000L,
+                    lastSyncedAtMillis = now
+                ),
+                totalCount = 5_671L,
+                todayCount = 0L,
+                isOnline = true,
+                globalStats = GlobalCounterStats(
+                    totalCount = 10_000_000L,
+                    userCount = 1_240L,
+                    fetchedAtMillis = now
+                ),
+                availableUpdate = com.example.update.AppUpdateInfo(
+                    versionCode = 4,
+                    versionName = "1.3",
+                    changelog = "Fixes",
+                    downloadUrl = "https://example.com/app.apk",
+                    isForced = false
+                )
+            )
+        )
+
+        composeTestRule.setContent {
+            OneCroreTheme {
+                Box(modifier = Modifier.width(320.dp)) {
+                    HomeScreen(
+                        uiState = currentState,
+                        onOpenCounter = {},
+                        onOpenCustomCounter = {},
+                        onCheckForUpdate = {},
+                        onOpenUpdateDialog = {},
+                        onDismissUpdateDialog = {},
+                        onCancelUpdateDownload = {},
+                        onUpdateNow = {}
+                    )
+                }
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        val density = context.resources.displayMetrics.density
+        val headerBounds = composeTestRule.onNodeWithTag("home_header_column").fetchSemanticsNode().boundsInRoot
+        val topRowBounds = composeTestRule.onNodeWithTag("home_header_top_row").fetchSemanticsNode().boundsInRoot
+        val greetingNode = composeTestRule.onNodeWithTag("home_arabic_greeting").fetchSemanticsNode()
+        val greetingBounds = greetingNode.boundsInRoot
+        val globalBounds = composeTestRule.onNodeWithTag("home_global_counter_block").fetchSemanticsNode().boundsInRoot
+        val totalBounds = composeTestRule.onNodeWithTag("home_global_counter_total").fetchSemanticsNode().boundsInRoot
+        val usersBounds = composeTestRule.onNodeWithTag("home_global_counter_users").fetchSemanticsNode().boundsInRoot
+        val updateBounds = composeTestRule.onNodeWithTag("home_update_badge_button").fetchSemanticsNode().boundsInRoot
+        val welcomeRowBounds = composeTestRule.onNodeWithTag("home_welcome_row").fetchSemanticsNode().boundsInRoot
+
+        // 1. At narrow 320dp width: zero horizontal collision/overlap between Global block and Ayat
+        assertTrue(
+            "At 320dp width, Global block must stay strictly left of Ayat with visible gap " +
+                "(global.right=${globalBounds.right}, greeting.left=${greetingBounds.left})",
+            globalBounds.right <= greetingBounds.left - (4f * density)
+        )
+        assertTrue(
+            "Global text must stay inside its column bounds (${totalBounds.right} <= ${globalBounds.right})",
+            totalBounds.right <= globalBounds.right + 1f
+        )
+        assertTrue(
+            "Global lines must not overlap vertically (${totalBounds.bottom} <= ${usersBounds.top})",
+            totalBounds.bottom <= usersBounds.top + 1f
+        )
+
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        greetingNode.config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult]
+            .action
+            ?.invoke(layouts)
+        assertTrue(layouts.isNotEmpty())
+        assertEquals("Ayat must stay strictly 2 lines even at 320dp", 2, layouts.first().lineCount)
+        assertFalse("Ayat must shrink rather than overflow at 320dp", layouts.first().hasVisualOverflow)
+
+        // 2. Update icon sits beside Welcome row below top header row (NOT inside top row)
+        assertTrue(
+            "Update badge must sit below top header row (${updateBounds.top} >= ${topRowBounds.bottom})",
+            updateBounds.top >= topRowBounds.bottom - 1f
+        )
+        assertTrue(
+            "Update badge belongs vertically inside welcome row",
+            updateBounds.top < welcomeRowBounds.bottom && welcomeRowBounds.top < updateBounds.bottom
+        )
+
+        // 3. When global stats are unavailable, Ayat stays right-aligned at the top right
+        currentState = currentState.copy(globalStats = null)
+        composeTestRule.waitForIdle()
+        assertEquals(0, composeTestRule.onAllNodesWithTag("home_global_counter_block").fetchSemanticsNodes().size)
+        val greetingBoundsNoStats = composeTestRule.onNodeWithTag("home_arabic_greeting").fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "Ayat must remain right-aligned when global stats are absent (${greetingBoundsNoStats.right} vs ${headerBounds.right})",
+            kotlin.math.abs(greetingBoundsNoStats.right - headerBounds.right) <= 2f * density
+        )
+    }
+
+    @Test
+    fun fixRun16Task1_ayatSize_largerFontRightAlignedTwoLinesOppositeGlobalAndStringUnchanged() {
+        Settings.Global.putFloat(
+            context.contentResolver,
+            Settings.Global.ANIMATOR_DURATION_SCALE,
+            0f
+        )
+        assertEquals("صَلُّوا عَلَيْهِ\nوَسَلِّمُوا تَسْلِيمًا", com.example.ui.screens.ARABIC_GREETING)
+        assertEquals(22f, com.example.ui.screens.HOME_AYAT_BASE_FONT_SIZE_SP, 0.01f)
+        assertTrue(
+            "New base Ayat font size must be modestly bigger than old 20sp",
+            com.example.ui.screens.HOME_AYAT_BASE_FONT_SIZE_SP > 20f
+        )
+
+        val now = System.currentTimeMillis()
+        val state = MainUiState(
+            isLoading = false,
+            profile = UserProfileEntity(
+                userId = "fix_run16_u1",
+                displayName = "Rza Official",
+                dailyTarget = 3_000,
+                setupCompleted = true,
+                startedAtMillis = now - 7L * 86_400_000L,
+                lastSyncedAtMillis = now
+            ),
+            totalCount = 5_671L,
+            todayCount = 0L,
+            isOnline = true,
+            globalStats = GlobalCounterStats(
+                totalCount = 24_305L,
+                userCount = 16L,
+                fetchedAtMillis = now - 60_000L
+            )
+        )
+
+        composeTestRule.setContent {
+            OneCroreTheme {
+                Box(modifier = Modifier.width(390.dp)) {
+                    HomeScreen(
+                        uiState = state,
+                        onOpenCounter = {},
+                        onOpenCustomCounter = {},
+                        onCheckForUpdate = {},
+                        onOpenUpdateDialog = {},
+                        onDismissUpdateDialog = {},
+                        onCancelUpdateDownload = {},
+                        onUpdateNow = {}
+                    )
+                }
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        val density = context.resources.displayMetrics.density
+        val headerBounds = composeTestRule.onNodeWithTag("home_header_column").fetchSemanticsNode().boundsInRoot
+        val greetingNode = composeTestRule.onNodeWithTag("home_arabic_greeting").fetchSemanticsNode()
+        val greetingBounds = greetingNode.boundsInRoot
+        val globalBounds = composeTestRule.onNodeWithTag("home_global_counter_block").fetchSemanticsNode().boundsInRoot
+
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        greetingNode.config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult]
+            .action
+            ?.invoke(layouts)
+        assertTrue("Expected TextLayoutResult for home_arabic_greeting", layouts.isNotEmpty())
+        val layout = layouts.first()
+
+        assertTrue(
+            "Rendered Ayat fontSize (${layout.layoutInput.style.fontSize.value}sp) must be bigger than previous 20sp",
+            layout.layoutInput.style.fontSize.value > 20.5f
+        )
+        assertEquals("Ayat must remain strictly 2 lines", 2, layout.lineCount)
+        assertFalse("Ayat must not overflow/clip", layout.hasVisualOverflow)
+        assertEquals(androidx.compose.ui.text.style.TextAlign.Right, layout.layoutInput.style.textAlign)
+        assertTrue(
+            "Ayat must align to the right edge of header (${greetingBounds.right} vs ${headerBounds.right})",
+            kotlin.math.abs(greetingBounds.right - headerBounds.right) <= 2f * density
+        )
+        assertTrue(
+            "Global block must sit on the left opposite the Ayat without collision (${globalBounds.right} <= ${greetingBounds.left})",
+            globalBounds.right <= greetingBounds.left + 0.5f
+        )
+        assertTrue(
+            "Global block and Ayat must remain on the same horizontal row",
+            globalBounds.top < greetingBounds.bottom && greetingBounds.top < globalBounds.bottom
+        )
+    }
+
+    @Test
+    fun fixRun16Task1_ayatSize_noOverlapAtSmallestWidth() {
+        Settings.Global.putFloat(
+            context.contentResolver,
+            Settings.Global.ANIMATOR_DURATION_SCALE,
+            0f
+        )
+        val now = System.currentTimeMillis()
+        val state = MainUiState(
+            isLoading = false,
+            profile = UserProfileEntity(
+                userId = "fix_run16_u_narrow",
+                displayName = "Rza Official",
+                dailyTarget = 3_000,
+                setupCompleted = true,
+                startedAtMillis = now - 86_400_000L,
+                lastSyncedAtMillis = now
+            ),
+            totalCount = 5_671L,
+            todayCount = 0L,
+            isOnline = true,
+            globalStats = GlobalCounterStats(
+                totalCount = 10_000_000L,
+                userCount = 1_240L,
+                fetchedAtMillis = now
+            )
+        )
+
+        composeTestRule.setContent {
+            OneCroreTheme {
+                Box(modifier = Modifier.width(320.dp)) {
+                    HomeScreen(
+                        uiState = state,
+                        onOpenCounter = {},
+                        onOpenCustomCounter = {},
+                        onCheckForUpdate = {},
+                        onOpenUpdateDialog = {},
+                        onDismissUpdateDialog = {},
+                        onCancelUpdateDownload = {},
+                        onUpdateNow = {}
+                    )
+                }
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        val density = context.resources.displayMetrics.density
+        val greetingNode = composeTestRule.onNodeWithTag("home_arabic_greeting").fetchSemanticsNode()
+        val greetingBounds = greetingNode.boundsInRoot
+        val globalBounds = composeTestRule.onNodeWithTag("home_global_counter_block").fetchSemanticsNode().boundsInRoot
+        val totalBounds = composeTestRule.onNodeWithTag("home_global_counter_total").fetchSemanticsNode().boundsInRoot
+
+        assertTrue(
+            "At 320dp width, Global block must stay strictly left of bigger Ayat (${globalBounds.right} <= ${greetingBounds.left - 4f * density})",
+            globalBounds.right <= greetingBounds.left - (4f * density)
+        )
+        assertTrue(
+            "Global text must fit inside its column without overflow (${totalBounds.right} <= ${globalBounds.right})",
+            totalBounds.right <= globalBounds.right + 1f
+        )
+
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        greetingNode.config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult]
+            .action
+            ?.invoke(layouts)
+        assertTrue(layouts.isNotEmpty())
+        assertEquals("Ayat must stay strictly 2 lines even at 320dp", 2, layouts.first().lineCount)
+        assertFalse("Ayat must scale down cleanly rather than clipping at 320dp", layouts.first().hasVisualOverflow)
+    }
+
+    @Test
+    fun fixRun16Task2_badgesHome_removedFromHomeAndLayoutOrderPreserved() {
+        Settings.Global.putFloat(
+            context.contentResolver,
+            Settings.Global.ANIMATOR_DURATION_SCALE,
+            0f
+        )
+        val now = System.currentTimeMillis()
+        val state = MainUiState(
+            isLoading = false,
+            profile = UserProfileEntity(
+                userId = "fix_run16_badges_u1",
+                displayName = "Rza Official",
+                dailyTarget = 3_000,
+                setupCompleted = true,
+                startedAtMillis = now - 7L * 86_400_000L,
+                lastSyncedAtMillis = now
+            ),
+            totalCount = 125_000L,
+            todayCount = 1_500L,
+            isOnline = true,
+            badgeProgress = com.example.badges.MilestoneBadgeManager.evaluatePureProgress(125_000L),
+            customCounters = listOf(
+                CustomCounterEntity(
+                    id = "cc_run16",
+                    userId = "fix_run16_badges_u1",
+                    name = "Istighfar",
+                    currentCount = 250L,
+                    targetCount = 1_000L,
+                    createdAtMillis = now,
+                    updatedAtMillis = now
+                )
+            )
+        )
+
+        composeTestRule.setContent {
+            OneCroreTheme {
+                Box(modifier = Modifier.width(390.dp)) {
+                    HomeScreen(
+                        uiState = state,
+                        onOpenCounter = {},
+                        onOpenCustomCounter = {},
+                        onCheckForUpdate = {},
+                        onOpenUpdateDialog = {},
+                        onDismissUpdateDialog = {},
+                        onCancelUpdateDownload = {},
+                        onUpdateNow = {}
+                    )
+                }
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        // No milestone badges card, count pill, latest line, 'left for' progress, or chevron anywhere on Home
+        assertEquals(0, composeTestRule.onAllNodesWithTag("home_milestone_badges_card", useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertEquals(0, composeTestRule.onAllNodesWithTag("home_milestone_badges_count", useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertEquals(0, composeTestRule.onAllNodesWithTag("home_milestone_badges_latest", useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertEquals(0, composeTestRule.onAllNodesWithText("MILESTONE BADGES", ignoreCase = true).fetchSemanticsNodes().size)
+        assertEquals(0, composeTestRule.onAllNodesWithText("left for", substring = true, ignoreCase = true).fetchSemanticsNodes().size)
+        assertEquals(0, composeTestRule.onAllNodes(androidx.compose.ui.test.hasContentDescription("Open all milestone badges in Stats")).fetchSemanticsNodes().size)
+
+        // Home still keeps all remaining sections in exact expected vertical order
+        val headerBounds = composeTestRule.onNodeWithTag("home_header_top_row").fetchSemanticsNode().boundsInRoot
+        val welcomeBounds = composeTestRule.onNodeWithTag("home_welcome_row").fetchSemanticsNode().boundsInRoot
+        val totalRecitedBounds = composeTestRule.onNodeWithText("TOTAL RECITED").fetchSemanticsNode().boundsInRoot
+        assertTrue(headerBounds.bottom <= welcomeBounds.top + 1f)
+        assertTrue(welcomeBounds.bottom <= totalRecitedBounds.top + 1f)
+
+        composeTestRule.onNodeWithText("TODAY VS TARGET").performScrollTo().assertIsDisplayed()
+        val totalAfterScroll1 = composeTestRule.onNodeWithText("TOTAL RECITED").fetchSemanticsNode().boundsInRoot
+        val todayVsTarget1 = composeTestRule.onNodeWithText("TODAY VS TARGET").fetchSemanticsNode().boundsInRoot
+        assertTrue(totalAfterScroll1.bottom <= todayVsTarget1.top + 1f)
+
+        composeTestRule.onNodeWithTag("home_counter_actions_row").performScrollTo().assertIsDisplayed()
+        val todayVsTarget2 = composeTestRule.onNodeWithText("TODAY VS TARGET").fetchSemanticsNode().boundsInRoot
+        val actionsRow2 = composeTestRule.onNodeWithTag("home_counter_actions_row").fetchSemanticsNode().boundsInRoot
+        assertTrue(todayVsTarget2.bottom <= actionsRow2.top + 1f)
+
+        composeTestRule.onNodeWithTag("home_custom_counters_list").performScrollTo().assertIsDisplayed()
+        val actionsRow3 = composeTestRule.onNodeWithTag("home_counter_actions_row").fetchSemanticsNode().boundsInRoot
+        val customCounters3 = composeTestRule.onNodeWithTag("home_custom_counters_list").fetchSemanticsNode().boundsInRoot
+        assertTrue(actionsRow3.bottom <= customCounters3.top + 1f)
+    }
+
+    @Test
+    fun fixRun16Task2_badgesHome_statsStillShowsBadgesAndCountingLogicUnchanged() {
+        // Counting / unlocking logic every 50,000 Durood stays untouched
+        assertEquals(50_000L, com.example.badges.MilestoneBadgeManager.BADGE_STEP)
+        assertEquals(200, com.example.badges.MilestoneBadgeManager.TOTAL_BADGES)
+
+        val beforeFirst = com.example.badges.MilestoneBadgeManager.evaluatePureProgress(49_999L)
+        assertEquals(0, beforeFirst.earnedCount)
+        assertEquals(1L, beforeFirst.remainingToNext)
+
+        val atFirst = com.example.badges.MilestoneBadgeManager.evaluatePureProgress(50_000L)
+        assertEquals(1, atFirst.earnedCount)
+        assertEquals("50K Badge", atFirst.latestEarnedBadge?.title)
+
+        val atTwoPlusHalf = com.example.badges.MilestoneBadgeManager.evaluatePureProgress(125_000L)
+        assertEquals(2, atTwoPlusHalf.earnedCount)
+        assertEquals("1 Lakh Badge", atTwoPlusHalf.latestEarnedBadge?.title)
+        assertEquals("1.5 Lakh Badge", atTwoPlusHalf.nextBadge?.title)
+        assertEquals(25_000L, atTwoPlusHalf.remainingToNext)
+
+        val atCrore = com.example.badges.MilestoneBadgeManager.evaluatePureProgress(10_000_000L)
+        assertEquals(200, atCrore.earnedCount)
+
+        // Stats screen still displays Milestone Badges section identically
+        val now = System.currentTimeMillis()
+        val statsState = MainUiState(
+            isLoading = false,
+            profile = UserProfileEntity(
+                userId = "fix_run16_stats_u",
+                displayName = "Rza Official",
+                dailyTarget = 3_000,
+                setupCompleted = true,
+                startedAtMillis = now - 7L * 86_400_000L,
+                lastSyncedAtMillis = now
+            ),
+            totalCount = 125_000L,
+            todayCount = 1_500L,
+            badgeProgress = atTwoPlusHalf
+        )
+
+        composeTestRule.setContent {
+            OneCroreTheme {
+                Box(modifier = Modifier.width(390.dp)) {
+                    com.example.ui.screens.StatsScreen(uiState = statsState)
+                }
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("stats_milestone_badges_section").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("MILESTONE BADGES").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag("stats_milestone_badges_count").performScrollTo().assertTextContains("2 / 200", substring = true)
+    }
+
+    @Test
+    fun fixRun15Task1_coldStart_realFirstFrameDrawablesRenderFullLogoWithoutBlackPatch() {
+        fun collectDrawableRefIds(xmlResId: Int): List<Int> {
+            val refs = mutableListOf<Int>()
+            val parser = context.resources.getXml(xmlResId)
+            try {
+                var event = parser.eventType
+                while (event != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+                    if (event == org.xmlpull.v1.XmlPullParser.START_TAG) {
+                        val ref = parser.getAttributeResourceValue(
+                            "http://schemas.android.com/apk/res/android",
+                            "drawable",
+                            0
+                        )
+                        if (ref != 0) refs.add(ref)
+                    }
+                    event = parser.next()
+                }
+            } finally {
+                parser.close()
+            }
+            return refs
+        }
+
+        // 1. bg_launch_logo_tile must NOT be an empty solid-black <shape>; it must stack tile + dot + '1' + body/tasbeeh
+        val tileDrawable = androidx.core.content.ContextCompat.getDrawable(context, R.drawable.bg_launch_logo_tile)
+        assertTrue(
+            "bg_launch_logo_tile must be a LayerDrawable containing full logo layers (was ${tileDrawable?.javaClass?.simpleName})",
+            tileDrawable is android.graphics.drawable.LayerDrawable
+        )
+        val tileLayers = tileDrawable as android.graphics.drawable.LayerDrawable
+        assertEquals("bg_launch_logo_tile must stack all 4 base logo layers", 4, tileLayers.numberOfLayers)
+        val tileRefs = collectDrawableRefIds(R.drawable.bg_launch_logo_tile)
+        assertEquals(
+            listOf(
+                R.drawable.ic_logo_v11_tile,
+                R.drawable.ic_logo_v11_dot,
+                R.drawable.ic_logo_v11_one,
+                R.drawable.ic_logo_v11_body_tasbeeh
+            ),
+            tileRefs
+        )
+
+        // 2. windowBackground (bg_launch_splash_window) renders faint grid + full logo tile at Frame 0
+        val windowSplashDrawable = androidx.core.content.ContextCompat.getDrawable(context, R.drawable.bg_launch_splash_window)
+        assertTrue(windowSplashDrawable is android.graphics.drawable.LayerDrawable)
+        val windowRefs = collectDrawableRefIds(R.drawable.bg_launch_splash_window)
+        assertEquals(listOf(R.drawable.bg_launch_faint_grid, R.drawable.bg_launch_logo_tile), windowRefs)
+
+        // 3. Android 12+ system splash icon (ic_splash_transparent) renders opaque faint grid + full logo tile at Frame 0
+        val systemSplashIcon = androidx.core.content.ContextCompat.getDrawable(context, R.drawable.ic_splash_transparent)
+        assertTrue(
+            "ic_splash_transparent must be a LayerDrawable with grid + full logo tile",
+            systemSplashIcon is android.graphics.drawable.LayerDrawable
+        )
+        val splashIconLayers = systemSplashIcon as android.graphics.drawable.LayerDrawable
+        assertEquals(2, splashIconLayers.numberOfLayers)
+        assertTrue(splashIconLayers.getDrawable(1) is android.graphics.drawable.LayerDrawable)
+        assertEquals(4, (splashIconLayers.getDrawable(1) as android.graphics.drawable.LayerDrawable).numberOfLayers)
+        val splashIconRefs = collectDrawableRefIds(R.drawable.ic_splash_transparent)
+        assertEquals(listOf(R.drawable.bg_splash_grid_288, R.drawable.bg_launch_logo_tile), splashIconRefs)
+
+        // 4. bg_splash_grid_288 must contain NO empty black patch (#FF000000) path; outer grid canvas is opaque #FFFFFFFF
+        val gridParser = context.resources.getXml(R.drawable.bg_splash_grid_288)
+        val fillColors = mutableListOf<Int>()
+        try {
+            var ev = gridParser.eventType
+            while (ev != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+                if (ev == org.xmlpull.v1.XmlPullParser.START_TAG && gridParser.name == "path") {
+                    val color = gridParser.getAttributeIntValue(
+                        "http://schemas.android.com/apk/res/android",
+                        "fillColor",
+                        0
+                    )
+                    if (color != 0) fillColors.add(color)
+                }
+                ev = gridParser.next()
+            }
+        } finally {
+            gridParser.close()
+        }
+        assertFalse("bg_splash_grid_288 must not draw an empty black patch", fillColors.contains(android.graphics.Color.BLACK))
+        assertTrue("bg_splash_grid_288 must retain opaque white base", fillColors.contains(android.graphics.Color.WHITE))
+    }
+
+    @Test
+    fun fixRun15Task1_coldStart_frameZeroCompleteRingDrawsTo270WaveRisesWithin1Sec() {
+        // Unit check on timeline & 270-degree cap
+        assertEquals(900, com.example.ui.screens.SplashIntroSpec.TOTAL_INTRO_DURATION_MS)
+        assertTrue(
+            "Total cold start duration must never exceed 1 second (actual=${com.example.ui.screens.SplashIntroSpec.TOTAL_INTRO_DURATION_MS}ms)",
+            com.example.ui.screens.SplashIntroSpec.TOTAL_INTRO_DURATION_MS <= 1_000
+        )
+        assertEquals(270f, com.example.ui.screens.SplashIntroSpec.MAX_RING_SWEEP_DEGREES, 0.01f)
+
+        val f0 = com.example.ui.screens.SplashIntroSpec.frameValuesForElapsedMs(0f)
+        assertEquals(1f, f0.dotT, 0.001f)
+        assertEquals(1f, f0.oneT, 0.001f)
+        assertEquals(1f, f0.bodyT, 0.001f)
+        assertEquals(1f, f0.creditT, 0.001f)
+        assertEquals(0f, com.example.ui.screens.SplashIntroSpec.ringSweepDegrees(f0.ringT), 0.001f)
+        assertEquals(0f, f0.waveProgress, 0.001f)
+
+        val fMid = com.example.ui.screens.SplashIntroSpec.frameValuesForElapsedMs(320f)
+        val midSweep = com.example.ui.screens.SplashIntroSpec.ringSweepDegrees(fMid.ringT)
+        assertTrue("Ring must be sweeping clockwise mid-intro (midSweep=$midSweep)", midSweep in 10f..269f)
+        assertEquals(0f, fMid.waveProgress, 0.001f)
+
+        val fRingDone = com.example.ui.screens.SplashIntroSpec.frameValuesForElapsedMs(600f)
+        assertEquals(270f, com.example.ui.screens.SplashIntroSpec.ringSweepDegrees(fRingDone.ringT), 0.01f)
+        assertEquals(0f, fRingDone.waveProgress, 0.001f)
+
+        val fWaveMid = com.example.ui.screens.SplashIntroSpec.frameValuesForElapsedMs(750f)
+        assertEquals(270f, com.example.ui.screens.SplashIntroSpec.ringSweepDegrees(fWaveMid.ringT), 0.01f)
+        assertTrue("Black wave must be rising in 600..900ms (wave=${fWaveMid.waveProgress})", fWaveMid.waveProgress in 0.05f..0.95f)
+
+        val fEnd = com.example.ui.screens.SplashIntroSpec.frameValuesForElapsedMs(1_500f)
+        assertEquals(270f, com.example.ui.screens.SplashIntroSpec.ringSweepDegrees(fEnd.ringT), 0.01f)
+        assertEquals(1f, fEnd.waveProgress, 0.001f)
+
+        // Robolectric UI timeline verification: Frame 0 -> ring draw -> black wave wipe -> Home opens <= 1s
+        SplashSessionGuard.resetForTest()
+        com.example.ui.screens.SplashIntroSpec.resetTestObservability()
+        com.example.ui.components.setLowRamDeviceOverrideForTest(false)
+        Settings.Global.putFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
+
+        var splashFinished by mutableStateOf(false)
+        try {
+            composeTestRule.mainClock.autoAdvance = false
+            composeTestRule.setContent {
+                OneCroreTheme {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        androidx.compose.material3.Text(
+                            "HomeDestination",
+                            modifier = Modifier.testTag("mock_home_dest")
+                        )
+                        if (!splashFinished) {
+                            SplashScreen(onFinished = { splashFinished = true })
+                        }
+                    }
+                }
+            }
+            composeTestRule.mainClock.advanceTimeByFrame()
+
+            // Frame 0: tile, dot, '1', figure+tasbeeh, and ring node all mounted cleanly
+            composeTestRule.onNodeWithTag("cold_start_splash_screen").assertIsDisplayed()
+            composeTestRule.onNodeWithTag("splash_logo_tile").assertIsDisplayed()
+            composeTestRule.onNodeWithTag("splash_logo_dot").assertIsDisplayed()
+            composeTestRule.onNodeWithTag("splash_logo_one").assertIsDisplayed()
+            composeTestRule.onNodeWithTag("splash_logo_body_tasbeeh").assertIsDisplayed()
+            composeTestRule.onNodeWithTag("splash_logo_ring").assertIsDisplayed()
+            assertFalse(splashFinished)
+
+            var elapsedMs = 0L
+            var sawWaveWipe = false
+            while (!splashFinished && elapsedMs < 1_500L) {
+                composeTestRule.mainClock.advanceTimeBy(50L)
+                org.robolectric.shadows.ShadowLooper.idleMainLooper()
+                elapsedMs += 50L
+                if (composeTestRule.onAllNodesWithTag("splash_wave_wipe").fetchSemanticsNodes().isNotEmpty()) {
+                    sawWaveWipe = true
+                }
+            }
+            composeTestRule.mainClock.autoAdvance = true
+            composeTestRule.waitForIdle()
+
+            assertTrue("Splash must complete cleanly", splashFinished)
+            assertTrue(
+                "Cold start splash must finish in ~800ms-1000ms (actual=$elapsedMs ms)",
+                elapsedMs in 800L..1_000L
+            )
+            assertTrue("Black layer rise wave wipe must run before Home opens", sawWaveWipe)
+            composeTestRule.onNodeWithTag("mock_home_dest").assertIsDisplayed()
+        } finally {
+            composeTestRule.mainClock.autoAdvance = true
+            com.example.ui.components.setLowRamDeviceOverrideForTest(null)
+        }
+    }
+
+    @Test
+    fun fixRun15Task1_coldStart_noDoubleSplashAndRespectsReduceMotion() {
+        // 1. Reduce Motion skips animation and shows static final logo immediately
+        SplashSessionGuard.resetForTest()
+        com.example.ui.screens.SplashIntroSpec.resetTestObservability()
+        com.example.ui.components.setLowRamDeviceOverrideForTest(false)
+        Settings.Global.putFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 0f)
+
+        var firstDone = false
+        var secondDone = false
+        var mode by mutableStateOf(0)
+        try {
+            composeTestRule.setContent {
+                OneCroreTheme {
+                    when (mode) {
+                        0 -> SplashScreen(onFinished = { firstDone = true })
+                        else -> SplashScreen(onFinished = { secondDone = true })
+                    }
+                }
+            }
+            composeTestRule.waitForIdle()
+            composeTestRule.onNodeWithTag("splash_logo_static_final").assertIsDisplayed()
+            assertTrue(com.example.ui.screens.SplashIntroSpec.lastSplashWasStaticForTest)
+            assertTrue(firstDone)
+            assertTrue(SplashSessionGuard.hasPlayedColdStartSplash)
+
+            // 2. No double splash: once played in session, mounting SplashScreen again finishes immediately without re-animating
+            Settings.Global.putFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
+            com.example.ui.screens.SplashIntroSpec.resetTestObservability()
+            mode = 1
+            composeTestRule.waitForIdle()
+            assertTrue("Already-played session must skip second splash immediately", secondDone)
+            assertTrue(com.example.ui.screens.SplashIntroSpec.lastSplashWasStaticForTest)
+            assertEquals(
+                listOf(com.example.ui.screens.SplashIntroStage.COMPLETE),
+                com.example.ui.screens.SplashIntroSpec.lastSplashStageHistoryForTest
+            )
+        } finally {
+            Settings.Global.putFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
+            com.example.ui.components.setLowRamDeviceOverrideForTest(null)
+        }
+    }
 }
+
+

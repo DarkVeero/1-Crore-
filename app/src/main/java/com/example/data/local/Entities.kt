@@ -17,7 +17,8 @@ data class UserProfileEntity(
     val startedAtMillis: Long = 0L,
     val lastSyncedAtMillis: Long = 0L,
     val pendingSync: Boolean = false,
-    val updatedAtMillis: Long = System.currentTimeMillis()
+    val updatedAtMillis: Long = System.currentTimeMillis(),
+    val themeMode: String = "bw"
 )
 
 @Entity(

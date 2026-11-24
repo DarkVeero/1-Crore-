@@ -38,6 +38,8 @@ import com.example.notifications.ReminderScheduler
 import com.example.sync.NetworkMonitor
 import com.example.sync.SyncWorker
 import com.example.ui.auth.AuthFlowStore
+import com.example.ui.theme.AppThemeMode
+import com.example.ui.theme.ThemePreferenceStore
 import com.example.update.ApkDownloadState
 import com.example.update.AppUpdateInfo
 import com.example.update.AppUpdateManager
@@ -134,7 +136,8 @@ data class MainUiState(
     val userGroups: List<GroupItem> = emptyList(),
     val pendingGroupCelebration: GroupCelebrationNotice? = null,
     val isGroupRefreshing: Boolean = false,
-    val isJoiningGroup: Boolean = false
+    val isJoiningGroup: Boolean = false,
+    val themeMode: AppThemeMode = AppThemeMode.BLACK_AND_WHITE
 ) {
     val displayName: String
         get() = profile?.displayName?.ifBlank { "Friend" } ?: "Friend"
@@ -403,19 +406,31 @@ class MainViewModel(
         )
     }
 
+    private val statusAndThemeFlow = combine(
+        isSyncingFlow,
+        statusMessageFlow,
+        initializedFlow,
+        ThemePreferenceStore.themeModeFlow(appContext)
+    ) { isSyncing, statusMsg, initialized, themeMode ->
+        StatusAndThemeUi(
+            isSyncing = isSyncing,
+            statusMessage = statusMsg,
+            initialized = initialized,
+            themeMode = themeMode
+        )
+    }
+
     val uiState: StateFlow<MainUiState> = combine(
         baseDataFlow,
         NetworkMonitor.observeOnline(appContext),
-        isSyncingFlow,
-        statusMessageFlow,
-        initializedFlow
-    ) { base, isOnline, isSyncing, statusMsg, initialized ->
+        statusAndThemeFlow
+    ) { base, isOnline, statusAndTheme ->
         val hasExisting = (base.profile?.setupCompleted == true) ||
             base.total > 0L ||
             base.days.isNotEmpty() ||
             base.customCounters.isNotEmpty()
         MainUiState(
-            isLoading = !initialized,
+            isLoading = !statusAndTheme.initialized,
             initialLoadOfflineError = base.initialLoadOfflineError && !hasExisting,
             profile = base.profile,
             allDays = base.days,
@@ -426,8 +441,8 @@ class MainViewModel(
             pendingSyncDaysCount = base.pendingDaysCount,
             pendingSyncDuroodCount = base.pendingDuroodTotal,
             isOnline = isOnline,
-            isSyncing = isSyncing,
-            statusMessage = statusMsg,
+            isSyncing = statusAndTheme.isSyncing,
+            statusMessage = statusAndTheme.statusMessage,
             accountCreatedAtMillis = accountCreatedAtMillis,
             currentDate = base.currentDate,
             availableUpdate = base.updateState.availableUpdate,
@@ -449,12 +464,16 @@ class MainViewModel(
             userGroups = base.userGroups,
             pendingGroupCelebration = base.pendingGroupCelebration,
             isGroupRefreshing = base.isGroupRefreshing,
-            isJoiningGroup = base.isJoiningGroup
+            isJoiningGroup = base.isJoiningGroup,
+            themeMode = statusAndTheme.themeMode
         )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000L),
-        initialValue = MainUiState(isLoading = true)
+        initialValue = MainUiState(
+            isLoading = true,
+            themeMode = ThemePreferenceStore.getCurrentThemeMode(appContext)
+        )
     )
 
     init {
@@ -490,6 +509,7 @@ class MainViewModel(
             }
         }
 
+        ThemePreferenceStore.reloadFromDevicePrefs(appContext)
         AuthFlowStore.consumeFreshLoginFlag(currentUserId)
         WidgetAndFloatingBridge.setActiveUserId(appContext, currentUserId)
         AnnouncementFrequencyStore.recordUserAppOpen(appContext, currentUserId)
@@ -642,6 +662,7 @@ class MainViewModel(
 
             if (online) {
                 isSyncingFlow.value = true
+                val hadPendingSyncBefore = repository.getProfileOnce(currentUserId)?.pendingSync == true
                 val syncResult = repository.syncWithCloud()
                 isSyncingFlow.value = false
 
@@ -652,6 +673,15 @@ class MainViewModel(
                         fallbackName = effectiveFallbackName,
                         accountCreatedAtMillis = accountCreatedAtMillis
                     )
+                    if (!hadPendingSyncBefore && syncResult.isSuccess) {
+                        val syncedProfile = repository.getProfileOnce(currentUserId)
+                        if (syncedProfile != null && !syncedProfile.pendingSync) {
+                            ThemePreferenceStore.setThemeMode(
+                                appContext,
+                                AppThemeMode.fromStorageKey(syncedProfile.themeMode)
+                            )
+                        }
+                    }
                     AuthFlowStore.clearNewEmailSignup(appContext, currentUserId)
                 } else if (syncResult.isFailure) {
                     // Cloud fetch failed and there is no local data: do NOT show Setup!
@@ -925,6 +955,18 @@ class MainViewModel(
         }
     }
 
+    fun onUpdateThemeMode(mode: AppThemeMode) {
+        ThemePreferenceStore.setThemeMode(appContext, mode)
+        viewModelScope.launch {
+            repository.updateThemeMode(currentUserId, mode, fallbackDisplayName)
+            statusMessageFlow.value = "Theme: ${mode.displayLabel}"
+            SyncWorker.enqueueWhenOnline(appContext)
+            if (NetworkMonitor.isCurrentlyOnline(appContext)) {
+                triggerSync(silent = true)
+            }
+        }
+    }
+
     fun triggerSync(silent: Boolean = false) {
         unsyncedTapCount = 0
         WidgetAndFloatingBridge.resetUnsyncedTapCount(appContext)
@@ -937,11 +979,18 @@ class MainViewModel(
                 }
                 return@launch
             }
+            val hadPendingSyncBefore = repository.getProfileOnce(currentUserId)?.pendingSync == true
             isSyncingFlow.value = true
             val result = repository.syncWithCloud()
             isSyncingFlow.value = false
             if (result.isSuccess) {
                 val profile = repository.getProfileOnce(currentUserId)
+                if (profile != null && !hadPendingSyncBefore && !profile.pendingSync) {
+                    ThemePreferenceStore.setThemeMode(
+                        appContext,
+                        AppThemeMode.fromStorageKey(profile.themeMode)
+                    )
+                }
                 if (profile != null && profile.setupCompleted) {
                     ReminderScheduler.scheduleReminders(
                         context = appContext,
@@ -2395,6 +2444,13 @@ class MainViewModel(
         val activeAnnouncement: AnnouncementItem?,
         val isDirectAnnouncement: Boolean,
         val announcementHistory: List<AnnouncementHistoryEntry>
+    )
+
+    private data class StatusAndThemeUi(
+        val isSyncing: Boolean,
+        val statusMessage: String?,
+        val initialized: Boolean,
+        val themeMode: AppThemeMode
     )
 
     private data class BaseData(

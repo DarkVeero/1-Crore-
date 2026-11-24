@@ -52,7 +52,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -96,12 +95,8 @@ import com.example.ui.components.BlackPillButton
 import com.example.ui.components.FaintGridBackground
 import com.example.ui.components.WhiteBorderPillButton
 import com.example.ui.components.formatNumber
-import com.example.ui.theme.HairlineGrey
-import com.example.ui.theme.OffWhite
-import com.example.ui.theme.PureBlack
-import com.example.ui.theme.PureWhite
-import com.example.ui.theme.SubtextGrey
-import com.example.ui.theme.TrackGrey
+import com.example.ui.theme.AppThemeColors
+import com.example.ui.theme.appOutlinedTextFieldColors
 import java.time.LocalDate
 
 @Composable
@@ -110,13 +105,14 @@ fun HomeMyGroupsCard(
     onOpenGroups: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val palette = AppThemeColors.palette
     val leadGroup = groups.firstOrNull()
     Surface(
-        color = PureWhite,
+        color = palette.cardSurface,
         shape = RoundedCornerShape(16.dp),
         modifier = modifier
             .fillMaxWidth()
-            .border(1.dp, HairlineGrey, RoundedCornerShape(16.dp))
+            .border(1.dp, palette.hairline, RoundedCornerShape(16.dp))
             .clip(RoundedCornerShape(16.dp))
             .clickable(role = Role.Button, onClick = onOpenGroups)
             .testTag("home_my_groups_card")
@@ -132,13 +128,13 @@ fun HomeMyGroupsCard(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .size(42.dp)
-                    .background(if (groups.isNotEmpty()) PureBlack else OffWhite, RoundedCornerShape(10.dp))
-                    .border(1.dp, if (groups.isNotEmpty()) PureBlack else HairlineGrey, RoundedCornerShape(10.dp))
+                    .background(if (groups.isNotEmpty()) palette.accent else palette.subtleSurface, RoundedCornerShape(10.dp))
+                    .border(1.dp, if (groups.isNotEmpty()) palette.accent else palette.hairline, RoundedCornerShape(10.dp))
             ) {
                 Icon(
                     imageVector = Icons.Outlined.Groups,
                     contentDescription = "My Groups",
-                    tint = if (groups.isNotEmpty()) PureWhite else PureBlack,
+                    tint = if (groups.isNotEmpty()) palette.onAccent else palette.onCard,
                     modifier = Modifier.size(22.dp)
                 )
             }
@@ -154,19 +150,19 @@ fun HomeMyGroupsCard(
                     Text(
                         text = "My Groups",
                         style = MaterialTheme.typography.titleSmall,
-                        color = PureBlack,
+                        color = palette.onCard,
                         fontWeight = FontWeight.SemiBold
                     )
                     Surface(
-                        color = OffWhite,
+                        color = palette.subtleSurface,
                         shape = RoundedCornerShape(999.dp),
                         modifier = Modifier
-                            .border(1.dp, HairlineGrey, RoundedCornerShape(999.dp))
+                            .border(1.dp, palette.hairline, RoundedCornerShape(999.dp))
                     ) {
                         Text(
                             text = "${groups.size} / ${GroupLogic.MAX_GROUPS_PER_USER}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = PureBlack,
+                            color = palette.onCard,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier
                                 .padding(horizontal = 8.dp, vertical = 2.dp)
@@ -182,7 +178,7 @@ fun HomeMyGroupsCard(
                         "Create a group or join with an invite code"
                     },
                     style = MaterialTheme.typography.bodySmall,
-                    color = SubtextGrey,
+                    color = palette.onCardSubtext,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -191,7 +187,7 @@ fun HomeMyGroupsCard(
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = "Open My Groups",
-                tint = PureBlack,
+                tint = palette.onCard,
                 modifier = Modifier.size(20.dp)
             )
         }
@@ -210,6 +206,7 @@ fun GroupsHubScreen(
     onJoinByCode: (String) -> Unit
 ) {
     BackHandler(onBack = onBack)
+    val palette = AppThemeColors.palette
 
     var joinCodeInput by remember { mutableStateOf("") }
     var showCreateDialog by remember { mutableStateOf(false) }
@@ -249,37 +246,37 @@ fun GroupsHubScreen(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
-                        tint = PureBlack
+                        tint = palette.onCanvas
                     )
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "My Groups",
                         style = MaterialTheme.typography.headlineMedium,
-                        color = PureBlack
+                        color = palette.onCanvas
                     )
                     Text(
                         text = "${groups.size} of ${GroupLogic.MAX_GROUPS_PER_USER} group slots used",
                         style = MaterialTheme.typography.bodySmall,
-                        color = SubtextGrey
+                        color = palette.onCanvasSubtext
                     )
                 }
             }
 
             if (!statusMessage.isNullOrBlank()) {
                 Surface(
-                    color = OffWhite,
+                    color = palette.subtleSurface,
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, PureBlack, RoundedCornerShape(12.dp))
+                        .border(1.dp, palette.strongBorder, RoundedCornerShape(12.dp))
                         .clickable { onClearStatusMessage() }
                         .testTag("groups_status_banner")
                 ) {
                     Text(
                         text = statusMessage,
                         style = MaterialTheme.typography.bodySmall,
-                        color = PureBlack,
+                        color = palette.onCard,
                         modifier = Modifier.padding(14.dp)
                     )
                 }
@@ -287,11 +284,11 @@ fun GroupsHubScreen(
 
             // Join with invite code card
             Surface(
-                color = PureWhite,
+                color = palette.cardSurface,
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, HairlineGrey, RoundedCornerShape(16.dp))
+                    .border(1.dp, palette.hairline, RoundedCornerShape(16.dp))
             ) {
                 Column(
                     modifier = Modifier
@@ -302,7 +299,7 @@ fun GroupsHubScreen(
                     Text(
                         text = "JOIN WITH CODE",
                         style = MaterialTheme.typography.labelSmall,
-                        color = SubtextGrey
+                        color = palette.onCardSubtext
                     )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -315,11 +312,7 @@ fun GroupsHubScreen(
                             placeholder = { Text("Enter invite code") },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = PureBlack,
-                                unfocusedBorderColor = HairlineGrey,
-                                cursorColor = PureBlack
-                            ),
+                            colors = appOutlinedTextFieldColors(),
                             modifier = Modifier
                                 .weight(1f)
                                 .testTag("groups_join_code_input")
@@ -339,7 +332,7 @@ fun GroupsHubScreen(
                         Text(
                             text = "You are in ${GroupLogic.MAX_GROUPS_PER_USER} groups (max). Open a group and tap Leave Group to free a slot.",
                             style = MaterialTheme.typography.labelMedium,
-                            color = SubtextGrey,
+                            color = palette.onCardSubtext,
                             modifier = Modifier.testTag("groups_limit_notice")
                         )
                     }
@@ -357,11 +350,11 @@ fun GroupsHubScreen(
 
             if (groups.isEmpty()) {
                 Surface(
-                    color = PureWhite,
+                    color = palette.cardSurface,
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, HairlineGrey, RoundedCornerShape(16.dp))
+                        .border(1.dp, palette.hairline, RoundedCornerShape(16.dp))
                         .testTag("groups_empty_state")
                 ) {
                     Column(
@@ -374,19 +367,19 @@ fun GroupsHubScreen(
                         Icon(
                             imageVector = Icons.Outlined.Groups,
                             contentDescription = null,
-                            tint = PureBlack,
+                            tint = palette.onCard,
                             modifier = Modifier.size(32.dp)
                         )
                         Text(
                             text = "No groups joined yet",
                             style = MaterialTheme.typography.titleMedium,
-                            color = PureBlack,
+                            color = palette.onCard,
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
                             text = "Create a group for Durood or any Zikr with a shared target, or enter a friend's invite code above.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = SubtextGrey,
+                            color = palette.onCardSubtext,
                             textAlign = TextAlign.Center
                         )
                     }
@@ -401,7 +394,7 @@ fun GroupsHubScreen(
                     Text(
                         text = "YOUR GROUPS",
                         style = MaterialTheme.typography.labelSmall,
-                        color = SubtextGrey
+                        color = palette.onCanvasSubtext
                     )
                     groups.forEach { group ->
                         GroupSummaryCard(
@@ -430,12 +423,13 @@ private fun GroupSummaryCard(
     group: GroupItem,
     onClick: () -> Unit
 ) {
+    val palette = AppThemeColors.palette
     Surface(
-        color = PureWhite,
+        color = palette.cardSurface,
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, HairlineGrey, RoundedCornerShape(16.dp))
+            .border(1.dp, palette.hairline, RoundedCornerShape(16.dp))
             .clip(RoundedCornerShape(16.dp))
             .clickable(role = Role.Button, onClick = onClick)
             .testTag("group_card_${group.id}")
@@ -453,18 +447,18 @@ private fun GroupSummaryCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Surface(
-                        color = if (group.type == GroupType.MAIN_DUROOD) PureBlack else OffWhite,
+                        color = if (group.type == GroupType.MAIN_DUROOD) palette.accent else palette.subtleSurface,
                         shape = RoundedCornerShape(999.dp),
                         modifier = Modifier.border(
                             1.dp,
-                            if (group.type == GroupType.MAIN_DUROOD) PureBlack else HairlineGrey,
+                            if (group.type == GroupType.MAIN_DUROOD) palette.accent else palette.hairline,
                             RoundedCornerShape(999.dp)
                         )
                     ) {
                         Text(
                             text = group.effectiveZikrName,
                             style = MaterialTheme.typography.labelSmall,
-                            color = if (group.type == GroupType.MAIN_DUROOD) PureWhite else PureBlack,
+                            color = if (group.type == GroupType.MAIN_DUROOD) palette.onAccent else palette.onCard,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier
                                 .padding(horizontal = 8.dp, vertical = 2.dp)
@@ -475,7 +469,7 @@ private fun GroupSummaryCard(
                     Text(
                         text = group.name,
                         style = MaterialTheme.typography.titleMedium,
-                        color = PureBlack,
+                        color = palette.onCard,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -484,7 +478,7 @@ private fun GroupSummaryCard(
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = "Open ${group.name}",
-                    tint = PureBlack
+                    tint = palette.onCard
                 )
             }
 
@@ -492,7 +486,7 @@ private fun GroupSummaryCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(5.dp)
-                    .background(TrackGrey, RoundedCornerShape(999.dp))
+                    .background(palette.track, RoundedCornerShape(999.dp))
             ) {
                 Box(
                     modifier = Modifier
@@ -502,7 +496,7 @@ private fun GroupSummaryCard(
                             )
                         )
                         .fillMaxHeight()
-                        .background(PureBlack, RoundedCornerShape(999.dp))
+                        .background(palette.accent, RoundedCornerShape(999.dp))
                 )
             }
 
@@ -513,13 +507,13 @@ private fun GroupSummaryCard(
                 Text(
                     text = "${formatNumber(group.effectiveGroupTotal)} / ${formatNumber(group.targetCount)}",
                     style = MaterialTheme.typography.labelMedium,
-                    color = PureBlack,
+                    color = palette.onCard,
                     fontWeight = FontWeight.Medium
                 )
                 Text(
                     text = "${formatGroupMemberCount(group.memberCount)} · Code ${group.inviteCode}",
                     style = MaterialTheme.typography.labelMedium,
-                    color = SubtextGrey
+                    color = palette.onCardSubtext
                 )
             }
         }
@@ -551,6 +545,7 @@ fun GroupDetailScreen(
 ) {
     BackHandler(onBack = onBack)
     val context = LocalContext.current
+    val palette = AppThemeColors.palette
     val floatingState by FloatingCounterManager.state.collectAsStateWithLifecycle()
 
     val activeGroupId = group?.id
@@ -627,14 +622,14 @@ fun GroupDetailScreen(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
-                        tint = PureBlack
+                        tint = palette.onCanvas
                     )
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = group.name,
                         style = MaterialTheme.typography.headlineSmall,
-                        color = PureBlack,
+                        color = palette.onCanvas,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -642,7 +637,7 @@ fun GroupDetailScreen(
                     Text(
                         text = group.effectiveZikrName,
                         style = MaterialTheme.typography.bodySmall,
-                        color = SubtextGrey,
+                        color = palette.onCanvasSubtext,
                         modifier = Modifier.testTag("group_detail_zikr_label")
                     )
                 }
@@ -659,7 +654,7 @@ fun GroupDetailScreen(
                         Icon(
                             imageVector = Icons.Outlined.Edit,
                             contentDescription = "Rename group",
-                            tint = PureBlack,
+                            tint = palette.onCanvas,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -673,7 +668,7 @@ fun GroupDetailScreen(
                 ) {
                     if (isRefreshing) {
                         CircularProgressIndicator(
-                            color = PureBlack,
+                            color = palette.accent,
                             strokeWidth = 2.dp,
                             modifier = Modifier.size(18.dp)
                         )
@@ -681,7 +676,7 @@ fun GroupDetailScreen(
                         Icon(
                             imageVector = Icons.Outlined.Refresh,
                             contentDescription = "Refresh group",
-                            tint = PureBlack,
+                            tint = palette.onCanvas,
                             modifier = Modifier.size(22.dp)
                         )
                     }
@@ -690,11 +685,11 @@ fun GroupDetailScreen(
 
             // Group Total + Member Count Card
             Surface(
-                color = PureWhite,
+                color = palette.cardSurface,
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, HairlineGrey, RoundedCornerShape(16.dp))
+                    .border(1.dp, palette.hairline, RoundedCornerShape(16.dp))
             ) {
                 Column(
                     modifier = Modifier
@@ -710,16 +705,16 @@ fun GroupDetailScreen(
                         Text(
                             text = "GROUP TOTAL",
                             style = MaterialTheme.typography.labelSmall,
-                            color = SubtextGrey
+                            color = palette.onCardSubtext
                         )
                         Surface(
-                            color = PureBlack,
+                            color = palette.accent,
                             shape = RoundedCornerShape(999.dp)
                         ) {
                             Text(
                                 text = formatGroupMemberCount(group.memberCount),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = PureWhite,
+                                color = palette.onAccent,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier
                                     .padding(horizontal = 10.dp, vertical = 4.dp)
@@ -731,7 +726,7 @@ fun GroupDetailScreen(
                     Text(
                         text = formatNumber(group.effectiveGroupTotal),
                         style = MaterialTheme.typography.displayMedium,
-                        color = PureBlack,
+                        color = palette.onCard,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.testTag("group_total_value")
                     )
@@ -740,7 +735,7 @@ fun GroupDetailScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(6.dp)
-                            .background(TrackGrey, RoundedCornerShape(999.dp))
+                            .background(palette.track, RoundedCornerShape(999.dp))
                     ) {
                         Box(
                             modifier = Modifier
@@ -750,7 +745,7 @@ fun GroupDetailScreen(
                                     )
                                 )
                                 .fillMaxHeight()
-                                .background(PureBlack, RoundedCornerShape(999.dp))
+                                .background(palette.accent, RoundedCornerShape(999.dp))
                         )
                     }
 
@@ -762,18 +757,18 @@ fun GroupDetailScreen(
                         Text(
                             text = "Target: ${formatNumber(group.targetCount)} (${group.progressPercentFormatted})",
                             style = MaterialTheme.typography.bodySmall,
-                            color = SubtextGrey,
+                            color = palette.onCardSubtext,
                             modifier = Modifier
                                 .weight(1f)
                                 .padding(end = 8.dp)
                                 .testTag("group_target_text")
                         )
                         Surface(
-                            color = OffWhite,
+                            color = palette.subtleSurface,
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
-                                .border(1.dp, HairlineGrey, RoundedCornerShape(8.dp))
+                                .border(1.dp, palette.hairline, RoundedCornerShape(8.dp))
                                 .minimumInteractiveComponentSize()
                                 .clickable(
                                     role = Role.Button,
@@ -796,13 +791,13 @@ fun GroupDetailScreen(
                                 Text(
                                     text = "Code: ${group.inviteCode}",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = PureBlack,
+                                    color = palette.onCard,
                                     fontWeight = FontWeight.SemiBold
                                 )
                                 Icon(
                                     imageVector = Icons.Outlined.ContentCopy,
                                     contentDescription = null,
-                                    tint = PureBlack,
+                                    tint = palette.onCard,
                                     modifier = Modifier.size(14.dp)
                                 )
                             }
@@ -812,7 +807,7 @@ fun GroupDetailScreen(
                     Text(
                         text = "Counts added or reduced here update only this group and your contribution inside it — separate from your personal Durood, global totals, and badges.",
                         style = MaterialTheme.typography.labelMedium,
-                        color = SubtextGrey
+                        color = palette.onCardSubtext
                     )
                 }
             }
@@ -860,7 +855,7 @@ fun GroupDetailScreen(
                     Text(
                         text = "CELEBRATIONS & REPORTS",
                         style = MaterialTheme.typography.labelSmall,
-                        color = SubtextGrey
+                        color = palette.onCanvasSubtext
                     )
                     celebrations.forEach { notice ->
                         GroupCelebrationCard(notice = notice)
@@ -878,14 +873,14 @@ fun GroupDetailScreen(
                 Text(
                     text = "MEMBER RANKING (MOST READ FIRST)",
                     style = MaterialTheme.typography.labelSmall,
-                    color = SubtextGrey
+                    color = palette.onCanvasSubtext
                 )
                 Surface(
-                    color = PureWhite,
+                    color = palette.cardSurface,
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, HairlineGrey, RoundedCornerShape(16.dp))
+                        .border(1.dp, palette.hairline, RoundedCornerShape(16.dp))
                 ) {
                     Column(modifier = Modifier.fillMaxWidth()) {
                         rankedMembers.forEachIndexed { index, member ->
@@ -896,7 +891,7 @@ fun GroupDetailScreen(
                                 isSelf = member.userId == currentUserId
                             )
                             if (index < rankedMembers.lastIndex) {
-                                HorizontalDivider(color = HairlineGrey, thickness = 1.dp)
+                                HorizontalDivider(color = palette.hairline, thickness = 1.dp)
                             }
                         }
                     }
@@ -935,7 +930,7 @@ fun GroupDetailScreen(
             Box(
                 modifier = Modifier
                     .shadow(4.dp, RoundedCornerShape(999.dp))
-                    .background(PureBlack, RoundedCornerShape(999.dp))
+                    .background(palette.accent, RoundedCornerShape(999.dp))
                     .testTag("group_invite_copied_pill")
             ) {
                 Row(
@@ -946,13 +941,13 @@ fun GroupDetailScreen(
                     Icon(
                         imageVector = Icons.Outlined.Check,
                         contentDescription = null,
-                        tint = PureWhite,
+                        tint = palette.onAccent,
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
                         text = "Copied",
                         style = MaterialTheme.typography.labelLarge,
-                        color = PureWhite,
+                        color = palette.onAccent,
                         fontWeight = FontWeight.Medium
                     )
                 }
@@ -963,16 +958,16 @@ fun GroupDetailScreen(
     if (showLeaveConfirm && group != null) {
         AlertDialog(
             onDismissRequest = { showLeaveConfirm = false },
-            containerColor = PureWhite,
+            containerColor = palette.cardSurface,
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier
-                .border(1.dp, PureBlack, RoundedCornerShape(16.dp))
+                .border(1.dp, palette.strongBorder, RoundedCornerShape(16.dp))
                 .testTag("group_leave_confirm_dialog"),
             title = {
                 Text(
                     text = "Leave ${group.name}?",
                     style = MaterialTheme.typography.titleMedium,
-                    color = PureBlack,
+                    color = palette.onCard,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.testTag("group_leave_dialog_title")
                 )
@@ -980,7 +975,7 @@ fun GroupDetailScreen(
             text = {
                 Text(
                     "Leaving frees a group slot (up to ${GroupLogic.MAX_GROUPS_PER_USER} groups). You can rejoin later with the invite code.",
-                    color = SubtextGrey
+                    color = palette.onCardSubtext
                 )
             },
             confirmButton = {
@@ -991,7 +986,7 @@ fun GroupDetailScreen(
                     },
                     modifier = Modifier.testTag("group_leave_confirm_button")
                 ) {
-                    Text("Leave", color = PureBlack, fontWeight = FontWeight.Bold)
+                    Text("Leave", color = palette.accent, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -999,7 +994,7 @@ fun GroupDetailScreen(
                     onClick = { showLeaveConfirm = false },
                     modifier = Modifier.testTag("group_leave_cancel_button")
                 ) {
-                    Text("Cancel", color = SubtextGrey)
+                    Text("Cancel", color = palette.onCardSubtext)
                 }
             }
         )
@@ -1010,16 +1005,16 @@ fun GroupDetailScreen(
         val canSubmitMainCustom = parsedAmount > 0L
         AlertDialog(
             onDismissRequest = { showMainCustomDialog = false },
-            containerColor = PureWhite,
+            containerColor = palette.cardSurface,
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier
-                .border(1.dp, PureBlack, RoundedCornerShape(16.dp))
+                .border(1.dp, palette.strongBorder, RoundedCornerShape(16.dp))
                 .testTag("group_main_custom_dialog"),
             title = {
                 Text(
                     text = if (mainCustomIsReduce) "Reduce Group Count" else "Add to ${group.name}",
                     style = MaterialTheme.typography.titleMedium,
-                    color = PureBlack,
+                    color = palette.onCard,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.testTag("group_main_custom_dialog_title")
                 )
@@ -1035,8 +1030,16 @@ fun GroupDetailScreen(
                             onClick = { mainCustomIsReduce = false },
                             label = { Text("Add") },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = PureBlack,
-                                selectedLabelColor = PureWhite
+                                containerColor = palette.cardSurface,
+                                labelColor = palette.onCard,
+                                selectedContainerColor = palette.accent,
+                                selectedLabelColor = palette.onAccent
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = !mainCustomIsReduce,
+                                borderColor = palette.hairline,
+                                selectedBorderColor = palette.accent
                             ),
                             modifier = Modifier.testTag("group_main_mode_add")
                         )
@@ -1045,8 +1048,16 @@ fun GroupDetailScreen(
                             onClick = { mainCustomIsReduce = true },
                             label = { Text("Reduce") },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = PureBlack,
-                                selectedLabelColor = PureWhite
+                                containerColor = palette.cardSurface,
+                                labelColor = palette.onCard,
+                                selectedContainerColor = palette.accent,
+                                selectedLabelColor = palette.onAccent
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = mainCustomIsReduce,
+                                borderColor = palette.hairline,
+                                selectedBorderColor = palette.accent
                             ),
                             modifier = Modifier.testTag("group_main_mode_reduce")
                         )
@@ -1061,11 +1072,7 @@ fun GroupDetailScreen(
                         label = { Text("Amount") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = PureBlack,
-                            unfocusedBorderColor = HairlineGrey,
-                            cursorColor = PureBlack
-                        ),
+                        colors = appOutlinedTextFieldColors(),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("group_main_custom_input")
@@ -1077,7 +1084,7 @@ fun GroupDetailScreen(
                             "Adds straight to this group's total and your group contribution only."
                         },
                         style = MaterialTheme.typography.bodySmall,
-                        color = SubtextGrey
+                        color = palette.onCardSubtext
                     )
                 }
             },
@@ -1096,7 +1103,7 @@ fun GroupDetailScreen(
                 ) {
                     Text(
                         text = if (mainCustomIsReduce) "Reduce" else "Add",
-                        color = if (canSubmitMainCustom) PureBlack else SubtextGrey,
+                        color = if (canSubmitMainCustom) palette.accent else palette.onCardSubtext,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -1109,7 +1116,7 @@ fun GroupDetailScreen(
                     },
                     modifier = Modifier.testTag("group_main_custom_cancel")
                 ) {
-                    Text("Cancel", color = SubtextGrey)
+                    Text("Cancel", color = palette.onCardSubtext)
                 }
             }
         )
@@ -1119,16 +1126,16 @@ fun GroupDetailScreen(
         val trimmedRename = renameInput.trim()
         AlertDialog(
             onDismissRequest = { showRenameDialog = false },
-            containerColor = PureWhite,
+            containerColor = palette.cardSurface,
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier
-                .border(1.dp, PureBlack, RoundedCornerShape(16.dp))
+                .border(1.dp, palette.strongBorder, RoundedCornerShape(16.dp))
                 .testTag("group_rename_dialog"),
             title = {
                 Text(
                     text = "Rename Group",
                     style = MaterialTheme.typography.titleMedium,
-                    color = PureBlack,
+                    color = palette.onCard,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.testTag("group_rename_dialog_title")
                 )
@@ -1139,11 +1146,7 @@ fun GroupDetailScreen(
                     onValueChange = { renameInput = it.take(60) },
                     label = { Text("Group Name") },
                     singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PureBlack,
-                        unfocusedBorderColor = HairlineGrey,
-                        cursorColor = PureBlack
-                    ),
+                    colors = appOutlinedTextFieldColors(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("group_rename_input")
@@ -1160,7 +1163,7 @@ fun GroupDetailScreen(
                 ) {
                     Text(
                         "Save",
-                        color = if (trimmedRename.isNotEmpty()) PureBlack else SubtextGrey,
+                        color = if (trimmedRename.isNotEmpty()) palette.accent else palette.onCardSubtext,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -1170,7 +1173,7 @@ fun GroupDetailScreen(
                     onClick = { showRenameDialog = false },
                     modifier = Modifier.testTag("group_rename_cancel_button")
                 ) {
-                    Text("Cancel", color = SubtextGrey)
+                    Text("Cancel", color = palette.onCardSubtext)
                 }
             }
         )
@@ -1179,16 +1182,16 @@ fun GroupDetailScreen(
     if (showDeleteConfirm && group != null) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            containerColor = PureWhite,
+            containerColor = palette.cardSurface,
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier
-                .border(1.dp, PureBlack, RoundedCornerShape(16.dp))
+                .border(1.dp, palette.strongBorder, RoundedCornerShape(16.dp))
                 .testTag("group_delete_confirm_dialog"),
             title = {
                 Text(
                     text = "Delete ${group.name}?",
                     style = MaterialTheme.typography.titleMedium,
-                    color = PureBlack,
+                    color = palette.onCard,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.testTag("group_delete_dialog_title")
                 )
@@ -1196,7 +1199,7 @@ fun GroupDetailScreen(
             text = {
                 Text(
                     "Deleting removes this group permanently for all members. Members' personal Durood totals will never be touched.",
-                    color = SubtextGrey
+                    color = palette.onCardSubtext
                 )
             },
             confirmButton = {
@@ -1207,7 +1210,7 @@ fun GroupDetailScreen(
                     },
                     modifier = Modifier.testTag("group_delete_confirm_button")
                 ) {
-                    Text("Delete", color = PureBlack, fontWeight = FontWeight.Bold)
+                    Text("Delete", color = palette.accent, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -1215,7 +1218,7 @@ fun GroupDetailScreen(
                     onClick = { showDeleteConfirm = false },
                     modifier = Modifier.testTag("group_delete_cancel_button")
                 ) {
-                    Text("Cancel", color = SubtextGrey)
+                    Text("Cancel", color = palette.onCardSubtext)
                 }
             }
         )
@@ -1229,12 +1232,13 @@ private fun GroupFloatingButtonToggleRow(
     onToggle: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val palette = AppThemeColors.palette
     Surface(
-        color = PureWhite,
+        color = palette.cardSurface,
         shape = RoundedCornerShape(16.dp),
         modifier = modifier
             .fillMaxWidth()
-            .border(1.dp, HairlineGrey, RoundedCornerShape(16.dp))
+            .border(1.dp, palette.hairline, RoundedCornerShape(16.dp))
             .clickable(role = Role.Switch, onClick = onToggle)
             .semantics {
                 contentDescription = "Floating button for $groupName"
@@ -1260,7 +1264,7 @@ private fun GroupFloatingButtonToggleRow(
                     modifier = Modifier
                         .size(36.dp)
                         .clip(CircleShape)
-                        .background(PureBlack)
+                        .background(palette.accent)
                 ) {
                     SmallOneCroreLogoGlyph(modifier = Modifier.size(20.dp))
                 }
@@ -1268,13 +1272,13 @@ private fun GroupFloatingButtonToggleRow(
                     Text(
                         text = "Floating button",
                         style = MaterialTheme.typography.titleMedium,
-                        color = PureBlack,
+                        color = palette.onCard,
                         fontWeight = FontWeight.Medium
                     )
                     Text(
                         text = "Count for this group over any app",
                         style = MaterialTheme.typography.labelSmall,
-                        color = SubtextGrey
+                        color = palette.onCardSubtext
                     )
                 }
             }
@@ -1282,12 +1286,12 @@ private fun GroupFloatingButtonToggleRow(
             Spacer(modifier = Modifier.width(12.dp))
 
             Surface(
-                color = if (isEnabled) PureBlack else PureWhite,
+                color = if (isEnabled) palette.accent else palette.cardSurface,
                 shape = RoundedCornerShape(999.dp),
                 modifier = Modifier
                     .border(
                         width = 1.dp,
-                        color = if (isEnabled) PureBlack else HairlineGrey,
+                        color = if (isEnabled) palette.accent else palette.hairline,
                         shape = RoundedCornerShape(999.dp)
                     )
                     .clickable(onClick = onToggle)
@@ -1296,7 +1300,7 @@ private fun GroupFloatingButtonToggleRow(
                 Text(
                     text = if (isEnabled) "ON" else "OFF",
                     style = MaterialTheme.typography.labelMedium,
-                    color = if (isEnabled) PureWhite else PureBlack,
+                    color = if (isEnabled) palette.onAccent else palette.onCard,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
                 )
@@ -1312,6 +1316,7 @@ private fun GroupMemberLeaderboardRow(
     todayKey: String,
     isSelf: Boolean
 ) {
+    val palette = AppThemeColors.palette
     val todayVal = member.effectiveTodayCount(todayKey)
     Row(
         modifier = Modifier
@@ -1326,13 +1331,13 @@ private fun GroupMemberLeaderboardRow(
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .size(32.dp)
-                .background(if (rank <= 3) PureBlack else OffWhite, CircleShape)
-                .border(1.dp, if (rank <= 3) PureBlack else HairlineGrey, CircleShape)
+                .background(if (rank <= 3) palette.accent else palette.subtleSurface, CircleShape)
+                .border(1.dp, if (rank <= 3) palette.accent else palette.hairline, CircleShape)
         ) {
             Text(
                 text = "#$rank",
                 style = MaterialTheme.typography.labelSmall,
-                color = if (rank <= 3) PureWhite else PureBlack,
+                color = if (rank <= 3) palette.onAccent else palette.onCard,
                 fontWeight = FontWeight.Bold
             )
         }
@@ -1341,7 +1346,7 @@ private fun GroupMemberLeaderboardRow(
             Text(
                 text = if (isSelf) "${member.displayName} (You)" else member.displayName,
                 style = MaterialTheme.typography.bodyMedium,
-                color = PureBlack,
+                color = palette.onCard,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -1349,7 +1354,7 @@ private fun GroupMemberLeaderboardRow(
             Text(
                 text = "Today: ${formatNumber(todayVal)}",
                 style = MaterialTheme.typography.labelMedium,
-                color = SubtextGrey
+                color = palette.onCardSubtext
             )
         }
 
@@ -1357,13 +1362,13 @@ private fun GroupMemberLeaderboardRow(
             Text(
                 text = formatNumber(member.lifetimeTotalCount),
                 style = MaterialTheme.typography.titleSmall,
-                color = PureBlack,
+                color = palette.onCard,
                 fontWeight = FontWeight.Bold
             )
             Text(
                 text = "total",
                 style = MaterialTheme.typography.labelSmall,
-                color = SubtextGrey
+                color = palette.onCardSubtext
             )
         }
     }
@@ -1371,13 +1376,14 @@ private fun GroupMemberLeaderboardRow(
 
 @Composable
 private fun GroupCelebrationCard(notice: GroupCelebrationNotice) {
+    val palette = AppThemeColors.palette
     val isPrivate = notice.type == GroupCelebrationType.WEEKLY_TOP_3_PRIVATE
     Surface(
-        color = if (isPrivate) PureBlack else OffWhite,
+        color = if (isPrivate) palette.accent else palette.subtleSurface,
         shape = RoundedCornerShape(14.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, PureBlack, RoundedCornerShape(14.dp))
+            .border(1.dp, palette.strongBorder, RoundedCornerShape(14.dp))
             .testTag("group_celebration_card_${notice.type.wireValue}")
     ) {
         Row(
@@ -1390,20 +1396,20 @@ private fun GroupCelebrationCard(notice: GroupCelebrationNotice) {
             Icon(
                 imageVector = Icons.Outlined.EmojiEvents,
                 contentDescription = null,
-                tint = if (isPrivate) PureWhite else PureBlack,
+                tint = if (isPrivate) palette.onAccent else palette.onCard,
                 modifier = Modifier.size(22.dp)
             )
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text(
                     text = notice.title,
                     style = MaterialTheme.typography.titleSmall,
-                    color = if (isPrivate) PureWhite else PureBlack,
+                    color = if (isPrivate) palette.onAccent else palette.onCard,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
                     text = notice.message,
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (isPrivate) PureWhite.copy(alpha = 0.88f) else PureBlack
+                    color = if (isPrivate) palette.onAccent.copy(alpha = 0.88f) else palette.onCard
                 )
             }
         }
@@ -1415,6 +1421,7 @@ fun CreateGroupDialog(
     onDismiss: () -> Unit,
     onCreate: (name: String, type: GroupType, zikrName: String?, targetCount: Long) -> Unit
 ) {
+    val palette = AppThemeColors.palette
     var name by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf(GroupType.MAIN_DUROOD) }
     var zikrName by remember { mutableStateOf("") }
@@ -1427,16 +1434,16 @@ fun CreateGroupDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = PureWhite,
+        containerColor = palette.cardSurface,
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier
-            .border(1.dp, PureBlack, RoundedCornerShape(16.dp))
+            .border(1.dp, palette.strongBorder, RoundedCornerShape(16.dp))
             .testTag("create_group_dialog"),
         title = {
             Text(
                 text = "Create Group",
                 style = MaterialTheme.typography.titleMedium,
-                color = PureBlack,
+                color = palette.onCard,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.testTag("create_group_dialog_title")
             )
@@ -1451,11 +1458,7 @@ fun CreateGroupDialog(
                     onValueChange = { name = it.take(60) },
                     label = { Text("Group name") },
                     singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PureBlack,
-                        unfocusedBorderColor = HairlineGrey,
-                        cursorColor = PureBlack
-                    ),
+                    colors = appOutlinedTextFieldColors(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("create_group_name_input")
@@ -1470,8 +1473,16 @@ fun CreateGroupDialog(
                         onClick = { selectedType = GroupType.MAIN_DUROOD },
                         label = { Text("For Durood") },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = PureBlack,
-                            selectedLabelColor = PureWhite
+                            containerColor = palette.cardSurface,
+                            labelColor = palette.onCard,
+                            selectedContainerColor = palette.accent,
+                            selectedLabelColor = palette.onAccent
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = selectedType == GroupType.MAIN_DUROOD,
+                            borderColor = palette.hairline,
+                            selectedBorderColor = palette.accent
                         ),
                         modifier = Modifier.testTag("create_group_type_main")
                     )
@@ -1480,8 +1491,16 @@ fun CreateGroupDialog(
                         onClick = { selectedType = GroupType.CUSTOM_ZIKR },
                         label = { Text("Other Zikr") },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = PureBlack,
-                            selectedLabelColor = PureWhite
+                            containerColor = palette.cardSurface,
+                            labelColor = palette.onCard,
+                            selectedContainerColor = palette.accent,
+                            selectedLabelColor = palette.onAccent
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = selectedType == GroupType.CUSTOM_ZIKR,
+                            borderColor = palette.hairline,
+                            selectedBorderColor = palette.accent
                         ),
                         modifier = Modifier.testTag("create_group_type_zikr")
                     )
@@ -1490,7 +1509,7 @@ fun CreateGroupDialog(
                 Text(
                     text = "TARGET",
                     style = MaterialTheme.typography.labelSmall,
-                    color = SubtextGrey
+                    color = palette.onCardSubtext
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1506,8 +1525,16 @@ fun CreateGroupDialog(
                             onClick = { targetInput = value },
                             label = { Text(label) },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = PureBlack,
-                                selectedLabelColor = PureWhite
+                                containerColor = palette.cardSurface,
+                                labelColor = palette.onCard,
+                                selectedContainerColor = palette.accent,
+                                selectedLabelColor = palette.onAccent
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = targetInput == value,
+                                borderColor = palette.hairline,
+                                selectedBorderColor = palette.accent
                             ),
                             modifier = Modifier.testTag(tag)
                         )
@@ -1523,11 +1550,7 @@ fun CreateGroupDialog(
                     label = { Text("Group target") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PureBlack,
-                        unfocusedBorderColor = HairlineGrey,
-                        cursorColor = PureBlack
-                    ),
+                    colors = appOutlinedTextFieldColors(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("create_group_target_input")
@@ -1539,11 +1562,7 @@ fun CreateGroupDialog(
                         onValueChange = { zikrName = it.take(60) },
                         label = { Text("Zikr name (e.g. سُبْحَانَ اللَّهِ)") },
                         singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = PureBlack,
-                            unfocusedBorderColor = HairlineGrey,
-                            cursorColor = PureBlack
-                        ),
+                        colors = appOutlinedTextFieldColors(),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("create_group_zikr_name_input")
@@ -1566,7 +1585,11 @@ fun CreateGroupDialog(
                 },
                 modifier = Modifier.testTag("create_group_submit_button")
             ) {
-                Text("Create", color = PureBlack, fontWeight = FontWeight.Bold)
+                Text(
+                    "Create",
+                    color = if (canSubmit) palette.accent else palette.onCardSubtext,
+                    fontWeight = FontWeight.Bold
+                )
             }
         },
         dismissButton = {
@@ -1574,7 +1597,7 @@ fun CreateGroupDialog(
                 onClick = onDismiss,
                 modifier = Modifier.testTag("create_group_cancel_button")
             ) {
-                Text("Cancel", color = SubtextGrey)
+                Text("Cancel", color = palette.onCardSubtext)
             }
         }
     )
@@ -1585,6 +1608,7 @@ fun GroupCelebrationPopupDialog(
     notice: GroupCelebrationNotice,
     onDismiss: () -> Unit
 ) {
+    val palette = AppThemeColors.palette
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
@@ -1596,19 +1620,19 @@ fun GroupCelebrationPopupDialog(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(PureBlack.copy(alpha = 0.45f))
+                .background(palette.scrim)
                 .pointerInput(Unit) { detectTapGestures { onDismiss() } }
                 .testTag("group_celebration_popup_dialog"),
             contentAlignment = Alignment.Center
         ) {
             Surface(
-                color = PureWhite,
+                color = palette.cardSurface,
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .padding(horizontal = 24.dp)
                     .widthIn(max = 400.dp)
                     .fillMaxWidth()
-                    .border(1.dp, PureBlack, RoundedCornerShape(16.dp))
+                    .border(1.dp, palette.strongBorder, RoundedCornerShape(16.dp))
                     .pointerInput(Unit) { detectTapGestures { } }
             ) {
                 Column(
@@ -1623,13 +1647,13 @@ fun GroupCelebrationPopupDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Surface(
-                            color = PureBlack,
+                            color = palette.accent,
                             shape = RoundedCornerShape(999.dp)
                         ) {
                             Text(
                                 text = notice.groupName.uppercase(),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = PureWhite,
+                                color = palette.onAccent,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -1645,7 +1669,7 @@ fun GroupCelebrationPopupDialog(
                             Icon(
                                 imageVector = Icons.Filled.Close,
                                 contentDescription = "Close group celebration",
-                                tint = PureBlack,
+                                tint = palette.onCard,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -1654,7 +1678,7 @@ fun GroupCelebrationPopupDialog(
                     Text(
                         text = notice.title,
                         style = MaterialTheme.typography.titleLarge,
-                        color = PureBlack,
+                        color = palette.onCard,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.testTag("group_celebration_popup_title")
                     )
@@ -1662,7 +1686,7 @@ fun GroupCelebrationPopupDialog(
                     Text(
                         text = notice.message,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = SubtextGrey
+                        color = palette.onCardSubtext
                     )
 
                     BlackPillButton(

@@ -95,11 +95,7 @@ import com.example.ui.screens.SetupScreen
 import com.example.ui.screens.SplashScreen
 import com.example.ui.screens.SplashSessionGuard
 import com.example.ui.screens.StatsScreen
-import com.example.ui.theme.FaintGridGrey
-import com.example.ui.theme.HairlineGrey
-import com.example.ui.theme.PureBlack
-import com.example.ui.theme.PureWhite
-import com.example.ui.theme.SubtextGrey
+import com.example.ui.theme.AppThemeColors
 import com.example.widget.OneCroreWidgetProvider
 import com.example.widget.WidgetAndFloatingBridge
 import com.google.firebase.Firebase
@@ -569,22 +565,24 @@ internal fun MainTabScaffold(
         }
     }
 
+    val palette = AppThemeColors.palette
+
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(PureWhite)
+            .background(palette.canvasBackground)
     ) {
         val useNavRail = maxWidth >= 600.dp
 
         Scaffold(
-            containerColor = PureWhite,
+            containerColor = palette.canvasBackground,
             contentWindowInsets = WindowInsets.safeDrawing,
             bottomBar = {
                 if (!useNavRail) {
                     androidx.compose.foundation.layout.Column {
-                        HorizontalDivider(color = HairlineGrey, thickness = 1.dp)
+                        HorizontalDivider(color = palette.navDivider, thickness = 1.dp)
                         NavigationBar(
-                            containerColor = PureWhite,
+                            containerColor = palette.navContainer,
                             tonalElevation = 0.dp
                         ) {
                             AppTab.entries.forEach { tab ->
@@ -608,11 +606,11 @@ internal fun MainTabScaffold(
                                         )
                                     },
                                     colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = PureBlack,
-                                        selectedTextColor = PureBlack,
-                                        indicatorColor = FaintGridGrey,
-                                        unselectedIconColor = SubtextGrey,
-                                        unselectedTextColor = SubtextGrey
+                                        selectedIconColor = palette.navSelectedIcon,
+                                        selectedTextColor = palette.navSelectedText,
+                                        indicatorColor = palette.navIndicator,
+                                        unselectedIconColor = palette.navUnselected,
+                                        unselectedTextColor = palette.navUnselected
                                     ),
                                     modifier = Modifier.testTag("nav_${tab.route}")
                                 )
@@ -629,7 +627,7 @@ internal fun MainTabScaffold(
             ) {
                 if (useNavRail) {
                     NavigationRail(
-                        containerColor = PureWhite,
+                        containerColor = palette.navContainer,
                         modifier = Modifier.fillMaxHeight()
                     ) {
                         AppTab.entries.forEach { tab ->
@@ -653,17 +651,17 @@ internal fun MainTabScaffold(
                                     )
                                 },
                                 colors = NavigationRailItemDefaults.colors(
-                                    selectedIconColor = PureBlack,
-                                    selectedTextColor = PureBlack,
-                                    indicatorColor = FaintGridGrey,
-                                    unselectedIconColor = SubtextGrey,
-                                    unselectedTextColor = SubtextGrey
+                                    selectedIconColor = palette.navSelectedIcon,
+                                    selectedTextColor = palette.navSelectedText,
+                                    indicatorColor = palette.navIndicator,
+                                    unselectedIconColor = palette.navUnselected,
+                                    unselectedTextColor = palette.navUnselected
                                 ),
                                 modifier = Modifier.testTag("nav_${tab.route}")
                             )
                         }
                     }
-                    VerticalDivider(color = HairlineGrey, thickness = 1.dp)
+                    VerticalDivider(color = palette.navDivider, thickness = 1.dp)
                 }
 
                 NavHost(
@@ -732,6 +730,7 @@ internal fun MainTabScaffold(
                             onUpdateDisplayName = viewModel::onUpdateDisplayName,
                             onUpdatePlan = viewModel::onUpdatePlan,
                             onUpdateReminders = viewModel::onUpdateReminders,
+                            onUpdateThemeMode = viewModel::onUpdateThemeMode,
                             onSyncNow = { viewModel.triggerSync(silent = false) },
                             onClearStatusMessage = viewModel::clearStatusMessage,
                             onExportBackupJson = viewModel::exportBackupJson,

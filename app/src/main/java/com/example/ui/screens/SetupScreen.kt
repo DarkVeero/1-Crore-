@@ -18,7 +18,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,11 +35,8 @@ import com.example.data.DuroodRepository
 import com.example.ui.components.BlackPillButton
 import com.example.ui.components.FaintGridBackground
 import com.example.ui.components.formatNumber
-import com.example.ui.theme.HairlineGrey
-import com.example.ui.theme.OffWhite
-import com.example.ui.theme.PureBlack
-import com.example.ui.theme.PureWhite
-import com.example.ui.theme.SubtextGrey
+import com.example.ui.theme.AppThemeColors
+import com.example.ui.theme.appOutlinedTextFieldColors
 import java.util.Locale
 import kotlin.math.ceil
 import kotlin.math.roundToInt
@@ -51,6 +47,7 @@ fun SetupScreen(
     initialDailyTarget: Int = DuroodRepository.DEFAULT_DAILY_TARGET,
     onCompleteSetup: (displayName: String, dailyTarget: Int) -> Unit
 ) {
+    val palette = AppThemeColors.palette
     var nameInput by remember(initialName) { mutableStateOf(initialName) }
     var dailyInput by remember(initialDailyTarget) { mutableStateOf(initialDailyTarget.toString()) }
     var yearsInput by remember(initialDailyTarget) {
@@ -82,28 +79,28 @@ fun SetupScreen(
                 Text(
                     text = "FIRST STEP · SETUP",
                     style = MaterialTheme.typography.labelMedium,
-                    color = SubtextGrey
+                    color = palette.onCanvasSubtext
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "Plan your 1 Crore",
                     style = MaterialTheme.typography.headlineLarge,
-                    color = PureBlack
+                    color = palette.onCanvas
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = "Choose how many years you want to finish in, or enter your daily count — both calculate automatically. You can change this anytime in Settings.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = SubtextGrey
+                    color = palette.onCanvasSubtext
                 )
             }
 
             Surface(
-                color = PureWhite,
+                color = palette.cardSurface,
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, HairlineGrey, RoundedCornerShape(16.dp))
+                    .border(1.dp, palette.hairline, RoundedCornerShape(16.dp))
             ) {
                 Column(
                     modifier = Modifier.padding(20.dp),
@@ -114,12 +111,7 @@ fun SetupScreen(
                         onValueChange = { if (it.length <= 60) nameInput = it },
                         label = { Text("Your Name (Display Name)") },
                         singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = PureBlack,
-                            unfocusedBorderColor = HairlineGrey,
-                            focusedLabelColor = PureBlack,
-                            cursorColor = PureBlack
-                        ),
+                        colors = appOutlinedTextFieldColors(),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("setup_name_input")
@@ -143,12 +135,7 @@ fun SetupScreen(
                         label = { Text("Years to complete 1 Crore") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = PureBlack,
-                            unfocusedBorderColor = HairlineGrey,
-                            focusedLabelColor = PureBlack,
-                            cursorColor = PureBlack
-                        ),
+                        colors = appOutlinedTextFieldColors(),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("setup_years_input")
@@ -168,23 +155,18 @@ fun SetupScreen(
                         label = { Text("Daily Target") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = PureBlack,
-                            unfocusedBorderColor = HairlineGrey,
-                            focusedLabelColor = PureBlack,
-                            cursorColor = PureBlack
-                        ),
+                        colors = appOutlinedTextFieldColors(),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("setup_daily_input")
                     )
 
                     Surface(
-                        color = OffWhite,
+                        color = palette.subtleSurface,
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .border(1.dp, HairlineGrey, RoundedCornerShape(10.dp))
+                            .border(1.dp, palette.hairline, RoundedCornerShape(10.dp))
                     ) {
                         Row(
                             modifier = Modifier
@@ -197,12 +179,12 @@ fun SetupScreen(
                                 Text(
                                     text = "DAILY TARGET",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = SubtextGrey
+                                    color = palette.onCardSubtext
                                 )
                                 Text(
                                     text = if (parsedDaily > 0) "${formatNumber(parsedDaily.toLong())} / day" else "—",
                                     style = MaterialTheme.typography.titleLarge,
-                                    color = PureBlack,
+                                    color = palette.onCard,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -210,7 +192,7 @@ fun SetupScreen(
                                 Text(
                                     text = "ESTIMATED DURATION",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = SubtextGrey
+                                    color = palette.onCardSubtext
                                 )
                                 Text(
                                     text = if (yearsValue > 0.0) {
@@ -220,7 +202,7 @@ fun SetupScreen(
                                         "—"
                                     },
                                     style = MaterialTheme.typography.titleMedium,
-                                    color = PureBlack
+                                    color = palette.onCard
                                 )
                             }
                         }

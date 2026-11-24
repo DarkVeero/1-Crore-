@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -33,7 +35,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -75,11 +76,15 @@ import com.example.ui.components.WhiteBorderPillButton
 import com.example.ui.components.formatNumber
 import com.example.ui.components.formatPendingSyncSummary
 import com.example.ui.components.formatSyncTime
-import com.example.ui.theme.HairlineGrey
-import com.example.ui.theme.OffWhite
-import com.example.ui.theme.PureBlack
-import com.example.ui.theme.PureWhite
-import com.example.ui.theme.SubtextGrey
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import com.example.ui.theme.AppThemeColors
+import com.example.ui.theme.AppThemeMode
+import com.example.ui.theme.appOutlinedTextFieldColors
 import com.example.update.AppUpdateManager
 import com.google.firebase.Firebase
 import com.google.firebase.auth.EmailAuthProvider
@@ -97,6 +102,7 @@ fun SettingsScreen(
     onUpdateDisplayName: (String) -> Unit,
     onUpdatePlan: (Int) -> Unit,
     onUpdateReminders: (Boolean, Int, Int, Int, Int) -> Unit,
+    onUpdateThemeMode: (AppThemeMode) -> Unit = {},
     onSyncNow: () -> Unit,
     onClearStatusMessage: () -> Unit,
     onExportBackupJson: suspend () -> String,
@@ -191,6 +197,8 @@ fun SettingsScreen(
         }
     }
 
+    val palette = AppThemeColors.palette
+
     Box(modifier = Modifier.fillMaxSize()) {
         FaintGridBackground()
 
@@ -207,7 +215,7 @@ fun SettingsScreen(
             Text(
                 text = "Settings",
                 style = MaterialTheme.typography.headlineLarge,
-                color = PureBlack
+                color = palette.onCanvas
             )
 
             val bannerText = localNotice ?: uiState.statusMessage
@@ -220,11 +228,11 @@ fun SettingsScreen(
             }
             if (bannerText != null) {
                 Surface(
-                    color = OffWhite,
+                    color = palette.subtleSurface,
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, PureBlack, RoundedCornerShape(12.dp))
+                        .border(1.dp, palette.strongBorder, RoundedCornerShape(12.dp))
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -233,7 +241,7 @@ fun SettingsScreen(
                         Text(
                             text = bannerText,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = PureBlack,
+                            color = palette.onCard,
                             modifier = Modifier
                                 .weight(1f)
                                 .padding(start = 14.dp, top = 12.dp, bottom = 12.dp)
@@ -250,7 +258,7 @@ fun SettingsScreen(
                             Icon(
                                 imageVector = Icons.Outlined.Close,
                                 contentDescription = "Dismiss message",
-                                tint = PureBlack
+                                tint = palette.onCard
                             )
                         }
                     }
@@ -264,13 +272,21 @@ fun SettingsScreen(
                     subtitle = uiState.displayName,
                     onClick = { showNameDialog = true }
                 )
-                HorizontalDivider(color = HairlineGrey)
+                HorizontalDivider(color = palette.hairline)
                 val yrs = DuroodRepository.ONE_CRORE.toDouble() / (uiState.dailyTarget * 365.0)
                 SettingsActionRow(
                     title = "Daily Plan",
                     subtitle = "${formatNumber(uiState.dailyTarget.toLong())} / day (≈ ${String.format(Locale.US, "%.1f", yrs)} years)",
                     onClick = { showPlanDialog = true },
                     testTag = "settings_change_plan"
+                )
+            }
+
+            // Theme Choice
+            SettingsSectionCard(title = "THEME") {
+                ThemeModeSelectorRow(
+                    selectedMode = uiState.themeMode,
+                    onSelectMode = onUpdateThemeMode
                 )
             }
 
@@ -287,12 +303,12 @@ fun SettingsScreen(
                         Text(
                             text = "Incomplete Target Alerts",
                             style = MaterialTheme.typography.titleMedium,
-                            color = PureBlack
+                            color = palette.onCard
                         )
                         Text(
                             text = "Only fires if today's ${formatNumber(uiState.dailyTarget.toLong())} target is incomplete",
                             style = MaterialTheme.typography.labelMedium,
-                            color = SubtextGrey
+                            color = palette.onCardSubtext
                         )
                     }
                     Switch(
@@ -311,15 +327,15 @@ fun SettingsScreen(
                             onUpdateReminders(enable, r1Hour, r1Min, r2Hour, r2Min)
                         },
                         colors = SwitchDefaults.colors(
-                            checkedThumbColor = PureWhite,
-                            checkedTrackColor = PureBlack,
-                            uncheckedThumbColor = PureBlack,
-                            uncheckedTrackColor = OffWhite,
-                            uncheckedBorderColor = HairlineGrey
+                            checkedThumbColor = palette.onAccent,
+                            checkedTrackColor = palette.accent,
+                            uncheckedThumbColor = palette.onCard,
+                            uncheckedTrackColor = palette.subtleSurface,
+                            uncheckedBorderColor = palette.hairline
                         )
                     )
                 }
-                HorizontalDivider(color = HairlineGrey)
+                HorizontalDivider(color = palette.hairline)
                 if (remindersEnabled && !ReminderScheduler.areNotificationsAllowed(context)) {
                     Row(
                         modifier = Modifier
@@ -352,25 +368,25 @@ fun SettingsScreen(
                         Text(
                             text = "Notifications are blocked in Android — tap to enable reminders",
                             style = MaterialTheme.typography.labelMedium,
-                            color = PureBlack,
+                            color = palette.onCard,
                             fontWeight = FontWeight.Medium,
                             modifier = Modifier.weight(1f)
                         )
                         Text(
                             text = "Allow",
                             style = MaterialTheme.typography.labelMedium,
-                            color = PureBlack,
+                            color = palette.accent,
                             fontWeight = FontWeight.Bold
                         )
                     }
-                    HorizontalDivider(color = HairlineGrey)
+                    HorizontalDivider(color = palette.hairline)
                 }
                 SettingsActionRow(
                     title = "Reminder 1",
                     subtitle = formatTime12h(r1Hour, r1Min),
                     onClick = { editingReminderSlot = 1 }
                 )
-                HorizontalDivider(color = HairlineGrey)
+                HorizontalDivider(color = palette.hairline)
                 SettingsActionRow(
                     title = "Reminder 2",
                     subtitle = formatTime12h(r2Hour, r2Min),
@@ -393,7 +409,7 @@ fun SettingsScreen(
                             Text(
                                 text = "Cloud Sync",
                                 style = MaterialTheme.typography.titleMedium,
-                                color = PureBlack
+                                color = palette.onCard
                             )
                             val syncStatusLine = buildString {
                                 append("Last synced: ${formatSyncTime(uiState.profile?.lastSyncedAtMillis ?: 0L)}")
@@ -411,7 +427,7 @@ fun SettingsScreen(
                             Text(
                                 text = syncStatusLine,
                                 style = MaterialTheme.typography.labelMedium,
-                                color = SubtextGrey,
+                                color = palette.onCardSubtext,
                                 modifier = Modifier.testTag("settings_cloud_sync_status")
                             )
                         }
@@ -423,7 +439,7 @@ fun SettingsScreen(
                         )
                     }
 
-                    HorizontalDivider(color = HairlineGrey)
+                    HorizontalDivider(color = palette.hairline)
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -468,14 +484,14 @@ fun SettingsScreen(
                         testTag = "settings_link_password_row"
                     )
                 }
-                HorizontalDivider(color = HairlineGrey)
+                HorizontalDivider(color = palette.hairline)
                 SettingsActionRow(
                     title = "Logout",
                     subtitle = "Sign out of this device",
                     onClick = { showLogoutDialog = true },
                     testTag = "settings_logout_row"
                 )
-                HorizontalDivider(color = HairlineGrey)
+                HorizontalDivider(color = palette.hairline)
                 SettingsActionRow(
                     title = "Delete Account",
                     subtitle = "Permanently remove all cloud & phone data",
@@ -507,7 +523,7 @@ fun SettingsScreen(
                     },
                     testTag = "settings_email_support_row"
                 )
-                HorizontalDivider(color = HairlineGrey)
+                HorizontalDivider(color = palette.hairline)
                 SettingsActionRow(
                     title = "Share this app",
                     subtitle = "1 Crore — Durood Counter & Daily Target",
@@ -600,19 +616,19 @@ fun SettingsScreen(
     if (pendingRestoreJson != null) {
         AlertDialog(
             onDismissRequest = { pendingRestoreJson = null },
-            containerColor = PureWhite,
+            containerColor = palette.cardSurface,
             shape = RoundedCornerShape(16.dp),
-            title = { Text("Restore Backup?", color = PureBlack) },
+            title = { Text("Restore Backup?", color = palette.onCard) },
             text = {
                 Text(
                     "Backup counts will merge with your phone safely. Higher local counts are never overwritten.",
-                    color = SubtextGrey
+                    color = palette.onCardSubtext
                 )
             },
             confirmButton = {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = { pendingRestoreJson = null }) {
-                        Text("Cancel", color = SubtextGrey)
+                        Text("Cancel", color = palette.onCardSubtext)
                     }
                     BlackPillButton(
                         text = "Restore",
@@ -630,19 +646,19 @@ fun SettingsScreen(
     if (showLogoutDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
-            containerColor = PureWhite,
+            containerColor = palette.cardSurface,
             shape = RoundedCornerShape(16.dp),
-            title = { Text("Logout?", color = PureBlack) },
+            title = { Text("Logout?", color = palette.onCard) },
             text = {
                 Text(
                     "Make sure pending counts are synced first. Your local data stays safe on this phone.",
-                    color = SubtextGrey
+                    color = palette.onCardSubtext
                 )
             },
             confirmButton = {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = { showLogoutDialog = false }) {
-                        Text("Cancel", color = SubtextGrey)
+                        Text("Cancel", color = palette.onCardSubtext)
                     }
                     BlackPillButton(
                         text = "Logout",
@@ -711,6 +727,7 @@ private fun LinkBackupPasswordDialog(
     onDismiss: () -> Unit,
     onLinked: () -> Unit
 ) {
+    val palette = AppThemeColors.palette
     val scope = rememberCoroutineScope()
     var newPassword by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
@@ -719,13 +736,13 @@ private fun LinkBackupPasswordDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = PureWhite,
+        containerColor = palette.cardSurface,
         shape = RoundedCornerShape(16.dp),
         title = {
             Text(
                 text = "Set Backup Password",
                 style = MaterialTheme.typography.titleLarge,
-                color = PureBlack
+                color = palette.onCard
             )
         },
         text = {
@@ -733,7 +750,7 @@ private fun LinkBackupPasswordDialog(
                 Text(
                     text = "Link a permanent password to your account (${Firebase.auth.currentUser?.email.orEmpty()}) for email sign-in recovery.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = SubtextGrey
+                    color = palette.onCardSubtext
                 )
                 OutlinedTextField(
                     value = newPassword,
@@ -745,12 +762,7 @@ private fun LinkBackupPasswordDialog(
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PureBlack,
-                        unfocusedBorderColor = HairlineGrey,
-                        focusedLabelColor = PureBlack,
-                        cursorColor = PureBlack
-                    ),
+                    colors = appOutlinedTextFieldColors(),
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
@@ -763,19 +775,14 @@ private fun LinkBackupPasswordDialog(
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PureBlack,
-                        unfocusedBorderColor = HairlineGrey,
-                        focusedLabelColor = PureBlack,
-                        cursorColor = PureBlack
-                    ),
+                    colors = appOutlinedTextFieldColors(),
                     modifier = Modifier.fillMaxWidth()
                 )
                 if (dialogError != null) {
                     Text(
                         text = dialogError.orEmpty(),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = PureBlack,
+                        color = palette.error,
                         fontWeight = FontWeight.Medium
                     )
                 }
@@ -784,7 +791,7 @@ private fun LinkBackupPasswordDialog(
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = onDismiss, enabled = !isSaving) {
-                    Text("Cancel", color = SubtextGrey)
+                    Text("Cancel", color = palette.onCardSubtext)
                 }
                 BlackPillButton(
                     text = if (isSaving) "Saving..." else "Save",
@@ -830,6 +837,7 @@ private fun ChangePasswordDialog(
     onDismiss: () -> Unit,
     onPasswordChanged: () -> Unit
 ) {
+    val palette = AppThemeColors.palette
     val scope = rememberCoroutineScope()
     var currentPassword by remember { mutableStateOf("") }
     var newPassword by remember { mutableStateOf("") }
@@ -839,13 +847,13 @@ private fun ChangePasswordDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = PureWhite,
+        containerColor = palette.cardSurface,
         shape = RoundedCornerShape(16.dp),
         title = {
             Text(
                 text = "Change Password",
                 style = MaterialTheme.typography.titleLarge,
-                color = PureBlack
+                color = palette.onCard
             )
         },
         text = {
@@ -860,12 +868,7 @@ private fun ChangePasswordDialog(
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PureBlack,
-                        unfocusedBorderColor = HairlineGrey,
-                        focusedLabelColor = PureBlack,
-                        cursorColor = PureBlack
-                    ),
+                    colors = appOutlinedTextFieldColors(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("change_password_current_input")
@@ -880,12 +883,7 @@ private fun ChangePasswordDialog(
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PureBlack,
-                        unfocusedBorderColor = HairlineGrey,
-                        focusedLabelColor = PureBlack,
-                        cursorColor = PureBlack
-                    ),
+                    colors = appOutlinedTextFieldColors(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("change_password_new_input")
@@ -900,12 +898,7 @@ private fun ChangePasswordDialog(
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PureBlack,
-                        unfocusedBorderColor = HairlineGrey,
-                        focusedLabelColor = PureBlack,
-                        cursorColor = PureBlack
-                    ),
+                    colors = appOutlinedTextFieldColors(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("change_password_confirm_input")
@@ -914,7 +907,7 @@ private fun ChangePasswordDialog(
                     Text(
                         text = dialogError.orEmpty(),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = PureBlack,
+                        color = palette.error,
                         fontWeight = FontWeight.Medium
                     )
                 }
@@ -923,7 +916,7 @@ private fun ChangePasswordDialog(
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = onDismiss, enabled = !isSaving) {
-                    Text("Cancel", color = SubtextGrey)
+                    Text("Cancel", color = palette.onCardSubtext)
                 }
                 BlackPillButton(
                     text = if (isSaving) "Updating..." else "Update",
@@ -970,22 +963,90 @@ private fun ChangePasswordDialog(
 }
 
 @Composable
+private fun ThemeModeSelectorRow(
+    selectedMode: AppThemeMode,
+    onSelectMode: (AppThemeMode) -> Unit
+) {
+    val palette = AppThemeColors.palette
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = "App Theme",
+                style = MaterialTheme.typography.titleMedium,
+                color = palette.onCard
+            )
+            Text(
+                text = "Active: ${selectedMode.displayLabel}",
+                style = MaterialTheme.typography.labelMedium,
+                color = palette.onCardSubtext
+            )
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(palette.subtleSurface, RoundedCornerShape(12.dp))
+                .border(1.dp, palette.hairline, RoundedCornerShape(12.dp))
+                .padding(4.dp)
+                .testTag("settings_theme_selector"),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            AppThemeMode.entries.forEach { mode ->
+                val isSelected = selectedMode == mode
+                val tag = when (mode) {
+                    AppThemeMode.BLACK_AND_WHITE -> "settings_theme_bw_option"
+                    AppThemeMode.RED -> "settings_theme_red_option"
+                }
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .weight(1f)
+                        .defaultMinSize(minHeight = 48.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isSelected) palette.accent else Color.Transparent)
+                        .clickable { onSelectMode(mode) }
+                        .semantics {
+                            role = Role.RadioButton
+                            selected = isSelected
+                        }
+                        .testTag(tag)
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                ) {
+                    Text(
+                        text = mode.displayLabel,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (isSelected) palette.onAccent else palette.onCard,
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun SettingsSectionCard(
     title: String,
     content: @Composable () -> Unit
 ) {
+    val palette = AppThemeColors.palette
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             text = title,
             style = MaterialTheme.typography.labelSmall,
-            color = SubtextGrey
+            color = palette.onCanvasSubtext
         )
         Surface(
-            color = PureWhite,
+            color = palette.cardSurface,
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.dp, HairlineGrey, RoundedCornerShape(16.dp))
+                .border(1.dp, palette.hairline, RoundedCornerShape(16.dp))
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 content()
@@ -1002,6 +1063,7 @@ private fun SettingsActionRow(
     testTag: String? = null,
     actionLabel: String = "Edit"
 ) {
+    val palette = AppThemeColors.palette
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1016,19 +1078,20 @@ private fun SettingsActionRow(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
-                color = PureBlack
+                color = palette.onCard
             )
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.labelMedium,
-                color = SubtextGrey
+                color = palette.onCardSubtext
             )
         }
         Spacer(modifier = Modifier.width(12.dp))
         Text(
             text = actionLabel,
             style = MaterialTheme.typography.labelLarge,
-            color = PureBlack
+            color = palette.accent,
+            fontWeight = FontWeight.Medium
         )
     }
 }
@@ -1039,31 +1102,27 @@ private fun EditNameDialog(
     onDismiss: () -> Unit,
     onSave: (String) -> Unit
 ) {
+    val palette = AppThemeColors.palette
     var name by remember { mutableStateOf(initialName) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = PureWhite,
+        containerColor = palette.cardSurface,
         shape = RoundedCornerShape(16.dp),
-        title = { Text("Update Name", color = PureBlack) },
+        title = { Text("Update Name", color = palette.onCard) },
         text = {
             OutlinedTextField(
                 value = name,
                 onValueChange = { if (it.length <= 60) name = it },
                 label = { Text("Display Name") },
                 singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = PureBlack,
-                    unfocusedBorderColor = HairlineGrey,
-                    focusedLabelColor = PureBlack,
-                    cursorColor = PureBlack
-                ),
+                colors = appOutlinedTextFieldColors(),
                 modifier = Modifier.fillMaxWidth()
             )
         },
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = onDismiss) {
-                    Text("Cancel", color = SubtextGrey)
+                    Text("Cancel", color = palette.onCardSubtext)
                 }
                 BlackPillButton(
                     text = "Save",
@@ -1081,6 +1140,7 @@ private fun EditPlanDialog(
     onDismiss: () -> Unit,
     onSave: (Int) -> Unit
 ) {
+    val palette = AppThemeColors.palette
     var dailyInput by remember { mutableStateOf(initialDailyTarget.toString()) }
     var yearsInput by remember {
         val yrs = DuroodRepository.ONE_CRORE.toDouble() / (initialDailyTarget.coerceAtLeast(1) * 365.0)
@@ -1090,9 +1150,9 @@ private fun EditPlanDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = PureWhite,
+        containerColor = palette.cardSurface,
         shape = RoundedCornerShape(16.dp),
-        title = { Text("Change 1 Crore Plan", color = PureBlack) },
+        title = { Text("Change 1 Crore Plan", color = palette.onCard) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
@@ -1113,12 +1173,7 @@ private fun EditPlanDialog(
                     label = { Text("Years to finish") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PureBlack,
-                        unfocusedBorderColor = HairlineGrey,
-                        focusedLabelColor = PureBlack,
-                        cursorColor = PureBlack
-                    ),
+                    colors = appOutlinedTextFieldColors(),
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
@@ -1135,12 +1190,7 @@ private fun EditPlanDialog(
                     label = { Text("Daily Target") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PureBlack,
-                        unfocusedBorderColor = HairlineGrey,
-                        focusedLabelColor = PureBlack,
-                        cursorColor = PureBlack
-                    ),
+                    colors = appOutlinedTextFieldColors(),
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -1148,7 +1198,7 @@ private fun EditPlanDialog(
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = onDismiss) {
-                    Text("Cancel", color = SubtextGrey)
+                    Text("Cancel", color = palette.onCardSubtext)
                 }
                 BlackPillButton(
                     text = "Save",
@@ -1168,6 +1218,7 @@ private fun ReminderTimePickerDialog(
     onDismiss: () -> Unit,
     onConfirm: (Int, Int) -> Unit
 ) {
+    val palette = AppThemeColors.palette
     val state = rememberTimePickerState(
         initialHour = initialHour,
         initialMinute = initialMinute,
@@ -1175,9 +1226,9 @@ private fun ReminderTimePickerDialog(
     )
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = PureWhite,
+        containerColor = palette.cardSurface,
         shape = RoundedCornerShape(16.dp),
-        title = { Text("Select Reminder Time", color = PureBlack) },
+        title = { Text("Select Reminder Time", color = palette.onCard) },
         text = {
             Box(
                 modifier = Modifier
@@ -1188,18 +1239,20 @@ private fun ReminderTimePickerDialog(
                 TimePicker(
                     state = state,
                     colors = TimePickerDefaults.colors(
-                        clockDialColor = OffWhite,
-                        selectorColor = PureBlack,
-                        containerColor = PureWhite,
-                        periodSelectorBorderColor = HairlineGrey,
-                        periodSelectorSelectedContainerColor = PureBlack,
-                        periodSelectorSelectedContentColor = PureWhite,
-                        periodSelectorUnselectedContainerColor = PureWhite,
-                        periodSelectorUnselectedContentColor = PureBlack,
-                        timeSelectorSelectedContainerColor = PureBlack,
-                        timeSelectorSelectedContentColor = PureWhite,
-                        timeSelectorUnselectedContainerColor = OffWhite,
-                        timeSelectorUnselectedContentColor = PureBlack
+                        clockDialColor = palette.subtleSurface,
+                        selectorColor = palette.accent,
+                        containerColor = palette.cardSurface,
+                        periodSelectorBorderColor = palette.hairline,
+                        periodSelectorSelectedContainerColor = palette.accent,
+                        periodSelectorSelectedContentColor = palette.onAccent,
+                        periodSelectorUnselectedContainerColor = palette.cardSurface,
+                        periodSelectorUnselectedContentColor = palette.onCard,
+                        timeSelectorSelectedContainerColor = palette.accent,
+                        timeSelectorSelectedContentColor = palette.onAccent,
+                        timeSelectorUnselectedContainerColor = palette.subtleSurface,
+                        timeSelectorUnselectedContentColor = palette.onCard,
+                        clockDialSelectedContentColor = palette.onAccent,
+                        clockDialUnselectedContentColor = palette.onCard
                     )
                 )
             }
@@ -1207,7 +1260,7 @@ private fun ReminderTimePickerDialog(
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = onDismiss) {
-                    Text("Cancel", color = SubtextGrey)
+                    Text("Cancel", color = palette.onCardSubtext)
                 }
                 BlackPillButton(
                     text = "Save",
@@ -1224,6 +1277,7 @@ fun DeleteAccountConfirmDialog(
     onConfirmDelete: () -> Unit,
     onVerifyPassword: suspend (String) -> Result<Unit> = { Result.success(Unit) }
 ) {
+    val palette = AppThemeColors.palette
     val scope = rememberCoroutineScope()
     var password by remember { mutableStateOf("") }
     var isVerifying by remember { mutableStateOf(false) }
@@ -1231,12 +1285,12 @@ fun DeleteAccountConfirmDialog(
 
     AlertDialog(
         onDismissRequest = { if (!isVerifying) onDismiss() },
-        containerColor = PureWhite,
+        containerColor = palette.cardSurface,
         shape = RoundedCornerShape(16.dp),
         title = {
             Text(
                 text = "Delete Account Permanently?",
-                color = PureBlack,
+                color = palette.onCard,
                 fontWeight = FontWeight.Bold
             )
         },
@@ -1245,7 +1299,7 @@ fun DeleteAccountConfirmDialog(
                 Text(
                     text = "This permanently deletes all your Durood Pak counts and profile from this phone and Firestore. Export a backup first if you want to keep your records. Enter your password below to confirm.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = SubtextGrey
+                    color = palette.onCardSubtext
                 )
                 OutlinedTextField(
                     value = password,
@@ -1258,12 +1312,7 @@ fun DeleteAccountConfirmDialog(
                     isError = passwordError != null,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PureBlack,
-                        unfocusedBorderColor = HairlineGrey,
-                        focusedLabelColor = PureBlack,
-                        cursorColor = PureBlack
-                    ),
+                    colors = appOutlinedTextFieldColors(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("delete_account_password_input")
@@ -1272,7 +1321,7 @@ fun DeleteAccountConfirmDialog(
                     Text(
                         text = passwordError.orEmpty(),
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.error,
+                        color = palette.error,
                         fontWeight = FontWeight.Medium,
                         modifier = Modifier.testTag("delete_account_password_error")
                     )
@@ -1286,7 +1335,7 @@ fun DeleteAccountConfirmDialog(
                     enabled = !isVerifying,
                     modifier = Modifier.testTag("delete_account_cancel_button")
                 ) {
-                    Text("Cancel", color = SubtextGrey)
+                    Text("Cancel", color = palette.onCardSubtext)
                 }
                 BlackPillButton(
                     text = if (isVerifying) "Verifying..." else "Delete",

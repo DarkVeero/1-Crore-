@@ -27,7 +27,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -55,11 +54,8 @@ import com.example.announcements.AnnouncementAction
 import com.example.announcements.AnnouncementAudience
 import com.example.announcements.AnnouncementFrequencyStore
 import com.example.announcements.AnnouncementItem
-import com.example.ui.theme.HairlineGrey
-import com.example.ui.theme.OffWhite
-import com.example.ui.theme.PureBlack
-import com.example.ui.theme.PureWhite
-import com.example.ui.theme.SubtextGrey
+import com.example.ui.theme.AppThemeColors
+import com.example.ui.theme.appOutlinedTextFieldColors
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
@@ -79,6 +75,7 @@ fun ScheduleAnnouncementDialog(
     onSchedule: (AnnouncementItem) -> Unit,
     nowProvider: () -> Long = { System.currentTimeMillis() }
 ) {
+    val palette = AppThemeColors.palette
     val zoneId = remember { ZoneId.systemDefault() }
     val initialNow = remember {
         Instant.ofEpochMilli(nowProvider()).atZone(zoneId).toLocalDateTime().plusMinutes(2)
@@ -117,14 +114,14 @@ fun ScheduleAnnouncementDialog(
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Surface(
-            color = PureWhite,
+            color = palette.cardSurface,
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier
                 .padding(horizontal = 20.dp, vertical = 24.dp)
                 .widthIn(max = 460.dp)
                 .heightIn(max = 680.dp)
                 .fillMaxWidth()
-                .border(1.dp, PureBlack, RoundedCornerShape(16.dp))
+                .border(1.dp, palette.strongBorder, RoundedCornerShape(16.dp))
                 .testTag("schedule_announcement_dialog")
         ) {
             Column(
@@ -137,7 +134,7 @@ fun ScheduleAnnouncementDialog(
                 Text(
                     text = "Schedule / Send Announcement",
                     style = MaterialTheme.typography.titleLarge,
-                    color = PureBlack,
+                    color = palette.onCard,
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
@@ -147,7 +144,7 @@ fun ScheduleAnnouncementDialog(
                         "Respects 10-min gap, max 3/day and 21/week caps."
                     },
                     style = MaterialTheme.typography.labelMedium,
-                    color = if (isUrgent) PureBlack else SubtextGrey,
+                    color = if (isUrgent) palette.accent else palette.onCardSubtext,
                     fontWeight = if (isUrgent) FontWeight.Medium else FontWeight.Normal,
                     modifier = Modifier.testTag("schedule_announcement_caps_hint")
                 )
@@ -160,12 +157,7 @@ fun ScheduleAnnouncementDialog(
                     },
                     label = { Text("Title (optional, emojis supported)") },
                     singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PureBlack,
-                        unfocusedBorderColor = HairlineGrey,
-                        focusedLabelColor = PureBlack,
-                        cursorColor = PureBlack
-                    ),
+                    colors = appOutlinedTextFieldColors(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("schedule_announcement_title_input")
@@ -180,12 +172,7 @@ fun ScheduleAnnouncementDialog(
                     label = { Text("Message text") },
                     minLines = 2,
                     maxLines = 4,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PureBlack,
-                        unfocusedBorderColor = HairlineGrey,
-                        focusedLabelColor = PureBlack,
-                        cursorColor = PureBlack
-                    ),
+                    colors = appOutlinedTextFieldColors(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("schedule_announcement_body_input")
@@ -194,7 +181,7 @@ fun ScheduleAnnouncementDialog(
                 Text(
                     text = "ANNOUNCEMENT TYPE",
                     style = MaterialTheme.typography.labelSmall,
-                    color = SubtextGrey
+                    color = palette.onCardSubtext
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -234,12 +221,7 @@ fun ScheduleAnnouncementDialog(
                         label = { Text("Link URL (https://...)") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = PureBlack,
-                            unfocusedBorderColor = HairlineGrey,
-                            focusedLabelColor = PureBlack,
-                            cursorColor = PureBlack
-                        ),
+                        colors = appOutlinedTextFieldColors(),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("schedule_announcement_link_input")
@@ -253,12 +235,7 @@ fun ScheduleAnnouncementDialog(
                         },
                         label = { Text("Button Text (e.g. Join)") },
                         singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = PureBlack,
-                            unfocusedBorderColor = HairlineGrey,
-                            focusedLabelColor = PureBlack,
-                            cursorColor = PureBlack
-                        ),
+                        colors = appOutlinedTextFieldColors(),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("schedule_announcement_button_text_input")
@@ -267,7 +244,7 @@ fun ScheduleAnnouncementDialog(
                     Text(
                         text = "Shows as a clean message pop-up with no action button.",
                         style = MaterialTheme.typography.labelMedium,
-                        color = SubtextGrey
+                        color = palette.onCardSubtext
                     )
                 }
 
@@ -280,23 +257,18 @@ fun ScheduleAnnouncementDialog(
                     label = { Text("Banner Image URL (optional https://...)") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PureBlack,
-                        unfocusedBorderColor = HairlineGrey,
-                        focusedLabelColor = PureBlack,
-                        cursorColor = PureBlack
-                    ),
+                    colors = appOutlinedTextFieldColors(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("schedule_announcement_image_url_input")
                 )
 
-                HorizontalDivider(color = HairlineGrey)
+                HorizontalDivider(color = palette.hairline)
 
                 Text(
                     text = "TARGET AUDIENCE",
                     style = MaterialTheme.typography.labelSmall,
-                    color = SubtextGrey
+                    color = palette.onCardSubtext
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     MonochromeOptionChip(
@@ -344,24 +316,19 @@ fun ScheduleAnnouncementDialog(
                         label = { Text("Inactive Days Threshold (default 3)") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = PureBlack,
-                            unfocusedBorderColor = HairlineGrey,
-                            focusedLabelColor = PureBlack,
-                            cursorColor = PureBlack
-                        ),
+                        colors = appOutlinedTextFieldColors(),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("schedule_announcement_inactive_days_input")
                     )
                 }
 
-                HorizontalDivider(color = HairlineGrey)
+                HorizontalDivider(color = palette.hairline)
 
                 Surface(
-                    color = if (isUrgent) OffWhite else PureWhite,
+                    color = if (isUrgent) palette.subtleSurface else palette.cardSurface,
                     shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, if (isUrgent) PureBlack else HairlineGrey),
+                    border = BorderStroke(1.dp, if (isUrgent) palette.accent else palette.hairline),
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
@@ -382,9 +349,9 @@ fun ScheduleAnnouncementDialog(
                             checked = isUrgent,
                             onCheckedChange = null,
                             colors = CheckboxDefaults.colors(
-                                checkedColor = PureBlack,
-                                uncheckedColor = PureBlack,
-                                checkmarkColor = PureWhite
+                                checkedColor = palette.accent,
+                                uncheckedColor = palette.onCard,
+                                checkmarkColor = palette.onAccent
                             )
                         )
                         Column(
@@ -398,19 +365,19 @@ fun ScheduleAnnouncementDialog(
                                 Text(
                                     text = "Urgent Announcement",
                                     style = MaterialTheme.typography.labelLarge,
-                                    color = PureBlack,
+                                    color = palette.onCard,
                                     fontWeight = FontWeight.SemiBold
                                 )
                                 Surface(
-                                    color = if (isUrgent) PureBlack else PureWhite,
+                                    color = if (isUrgent) palette.accent else palette.cardSurface,
                                     shape = RoundedCornerShape(999.dp),
-                                    border = BorderStroke(1.dp, if (isUrgent) PureBlack else HairlineGrey),
+                                    border = BorderStroke(1.dp, if (isUrgent) palette.accent else palette.hairline),
                                     modifier = Modifier.testTag("schedule_announcement_urgent_badge")
                                 ) {
                                     Text(
                                         text = "URGENT",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = if (isUrgent) PureWhite else SubtextGrey,
+                                        color = if (isUrgent) palette.onAccent else palette.onCardSubtext,
                                         fontWeight = FontWeight.Bold,
                                         maxLines = 1,
                                         softWrap = false,
@@ -421,18 +388,18 @@ fun ScheduleAnnouncementDialog(
                             Text(
                                 text = "Bypass 10-min gap, 3/day & 21/week caps; shows immediately",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = SubtextGrey
+                                color = palette.onCardSubtext
                             )
                         }
                     }
                 }
 
-                HorizontalDivider(color = HairlineGrey)
+                HorizontalDivider(color = palette.hairline)
 
                 Text(
                     text = "SEND TIME",
                     style = MaterialTheme.typography.labelSmall,
-                    color = SubtextGrey
+                    color = palette.onCardSubtext
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -533,7 +500,7 @@ fun ScheduleAnnouncementDialog(
                     Text(
                         text = "Scheduled for: ${scheduledDateTime.format(DateTimeFormatter.ofPattern("dd MMM yyyy, h:mm a", Locale.US))}",
                         style = MaterialTheme.typography.labelMedium,
-                        color = PureBlack,
+                        color = palette.onCard,
                         fontWeight = FontWeight.Medium,
                         modifier = Modifier.testTag("schedule_announcement_scheduled_preview")
                     )
@@ -543,7 +510,7 @@ fun ScheduleAnnouncementDialog(
                     Text(
                         text = validationError.orEmpty(),
                         style = MaterialTheme.typography.bodySmall,
-                        color = PureBlack,
+                        color = palette.error,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.testTag("schedule_announcement_error")
                     )
@@ -562,7 +529,7 @@ fun ScheduleAnnouncementDialog(
                             .minimumInteractiveComponentSize()
                             .testTag("schedule_announcement_cancel_button")
                     ) {
-                        Text("Cancel", color = SubtextGrey)
+                        Text("Cancel", color = palette.onCardSubtext)
                     }
                     BlackPillButton(
                         text = if (isScheduledForLater) "Schedule" else "Send Now",
@@ -660,33 +627,33 @@ fun ScheduleAnnouncementDialog(
                         showDatePicker = false
                     }
                 ) {
-                    Text("OK", color = PureBlack, fontWeight = FontWeight.SemiBold)
+                    Text("OK", color = palette.accent, fontWeight = FontWeight.SemiBold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDatePicker = false }) {
-                    Text("Cancel", color = SubtextGrey)
+                    Text("Cancel", color = palette.onCardSubtext)
                 }
             },
-            colors = DatePickerDefaults.colors(containerColor = PureWhite)
+            colors = DatePickerDefaults.colors(containerColor = palette.cardSurface)
         ) {
             DatePicker(
                 state = datePickerState,
                 colors = DatePickerDefaults.colors(
-                    containerColor = PureWhite,
-                    titleContentColor = PureBlack,
-                    headlineContentColor = PureBlack,
-                    weekdayContentColor = SubtextGrey,
-                    subheadContentColor = PureBlack,
-                    yearContentColor = PureBlack,
-                    currentYearContentColor = PureBlack,
-                    selectedYearContentColor = PureWhite,
-                    selectedYearContainerColor = PureBlack,
-                    dayContentColor = PureBlack,
-                    selectedDayContentColor = PureWhite,
-                    selectedDayContainerColor = PureBlack,
-                    todayContentColor = PureBlack,
-                    todayDateBorderColor = PureBlack
+                    containerColor = palette.cardSurface,
+                    titleContentColor = palette.onCard,
+                    headlineContentColor = palette.onCard,
+                    weekdayContentColor = palette.onCardSubtext,
+                    subheadContentColor = palette.onCard,
+                    yearContentColor = palette.onCard,
+                    currentYearContentColor = palette.onCard,
+                    selectedYearContentColor = palette.onAccent,
+                    selectedYearContainerColor = palette.accent,
+                    dayContentColor = palette.onCard,
+                    selectedDayContentColor = palette.onAccent,
+                    selectedDayContainerColor = palette.accent,
+                    todayContentColor = palette.accent,
+                    todayDateBorderColor = palette.accent
                 )
             )
         }
@@ -700,9 +667,9 @@ fun ScheduleAnnouncementDialog(
         )
         AlertDialog(
             onDismissRequest = { showTimePicker = false },
-            containerColor = PureWhite,
+            containerColor = palette.cardSurface,
             shape = RoundedCornerShape(16.dp),
-            title = { Text("Select Send Time", color = PureBlack) },
+            title = { Text("Select Send Time", color = palette.onCard) },
             text = {
                 Box(
                     modifier = Modifier.fillMaxWidth(),
@@ -711,18 +678,18 @@ fun ScheduleAnnouncementDialog(
                     TimePicker(
                         state = timeState,
                         colors = TimePickerDefaults.colors(
-                            clockDialColor = OffWhite,
-                            selectorColor = PureBlack,
-                            containerColor = PureWhite,
-                            periodSelectorBorderColor = HairlineGrey,
-                            periodSelectorSelectedContainerColor = PureBlack,
-                            periodSelectorSelectedContentColor = PureWhite,
-                            periodSelectorUnselectedContainerColor = PureWhite,
-                            periodSelectorUnselectedContentColor = PureBlack,
-                            timeSelectorSelectedContainerColor = PureBlack,
-                            timeSelectorSelectedContentColor = PureWhite,
-                            timeSelectorUnselectedContainerColor = OffWhite,
-                            timeSelectorUnselectedContentColor = PureBlack
+                            clockDialColor = palette.subtleSurface,
+                            selectorColor = palette.accent,
+                            containerColor = palette.cardSurface,
+                            periodSelectorBorderColor = palette.hairline,
+                            periodSelectorSelectedContainerColor = palette.accent,
+                            periodSelectorSelectedContentColor = palette.onAccent,
+                            periodSelectorUnselectedContainerColor = palette.cardSurface,
+                            periodSelectorUnselectedContentColor = palette.onCard,
+                            timeSelectorSelectedContainerColor = palette.accent,
+                            timeSelectorSelectedContentColor = palette.onAccent,
+                            timeSelectorUnselectedContainerColor = palette.subtleSurface,
+                            timeSelectorUnselectedContentColor = palette.onCard
                         )
                     )
                 }
@@ -730,7 +697,7 @@ fun ScheduleAnnouncementDialog(
             confirmButton = {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = { showTimePicker = false }) {
-                        Text("Cancel", color = SubtextGrey)
+                        Text("Cancel", color = palette.onCardSubtext)
                     }
                     BlackPillButton(
                         text = "OK",
@@ -753,10 +720,11 @@ private fun MonochromeOptionChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val palette = AppThemeColors.palette
     Surface(
-        color = if (selected) PureBlack else PureWhite,
+        color = if (selected) palette.accent else palette.cardSurface,
         shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, if (selected) PureBlack else HairlineGrey),
+        border = BorderStroke(1.dp, if (selected) palette.accent else palette.hairline),
         modifier = modifier
             .clickable(onClick = onClick)
             .minimumInteractiveComponentSize()
@@ -768,7 +736,7 @@ private fun MonochromeOptionChip(
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelLarge,
-                color = if (selected) PureWhite else PureBlack,
+                color = if (selected) palette.onAccent else palette.onCard,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
             )
         }

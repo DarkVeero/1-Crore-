@@ -23,6 +23,7 @@ class OneCroreApp : Application(), Configuration.Provider {
         appScope.launch {
             AnnouncementNotificationHelper.ensureSubscribedToAnnouncementsTopic(this@OneCroreApp)
             UpdateCheckWorker.scheduleDailyCheck(this@OneCroreApp)
+            com.example.sync.SyncWorker.enqueuePeriodicSync(this@OneCroreApp)
             ReminderScheduler.rescheduleFromSavedStateIfPossible(this@OneCroreApp)
             com.example.announcements.AnnouncementScheduledDispatcher.reschedulePendingAnnouncements(this@OneCroreApp)
         }

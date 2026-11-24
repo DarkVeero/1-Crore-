@@ -37,6 +37,7 @@ service cloud.firestore {
              data.reminder2Hour is int && data.reminder2Hour >= 0 && data.reminder2Hour <= 23 &&
              data.reminder2Minute is int && data.reminder2Minute >= 0 && data.reminder2Minute <= 59 &&
              data.remindersEnabled is bool &&
+             (!('themeMode' in data) || (data.themeMode is string && (data.themeMode == 'bw' || data.themeMode == 'red'))) &&
              data.createdAt is timestamp && data.createdAt <= request.time &&
              data.updatedAt is timestamp && data.updatedAt <= request.time;
     }
@@ -87,7 +88,7 @@ service cloud.firestore {
                        incoming().keys().hasOnly([
                          'userId', 'displayName', 'dailyTarget', 'setupCompleted',
                          'reminder1Hour', 'reminder1Minute', 'reminder2Hour', 'reminder2Minute',
-                         'remindersEnabled', 'createdAt', 'updatedAt'
+                         'remindersEnabled', 'themeMode', 'createdAt', 'updatedAt'
                        ]) &&
                        isValidUserProfile(incoming(), userId);
 
@@ -100,7 +101,7 @@ service cloud.firestore {
                        incoming().diff(existing()).affectedKeys().hasOnly([
                          'displayName', 'dailyTarget', 'setupCompleted',
                          'reminder1Hour', 'reminder1Minute', 'reminder2Hour', 'reminder2Minute',
-                         'remindersEnabled', 'updatedAt'
+                         'remindersEnabled', 'themeMode', 'updatedAt'
                        ]);
 
       allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;

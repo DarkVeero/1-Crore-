@@ -90,8 +90,10 @@ import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.data.local.AppDatabase
 import com.example.ui.components.formatNumber
-import com.example.ui.theme.PureBlack
-import com.example.ui.theme.PureWhite
+import com.example.ui.theme.AppThemeMode
+import com.example.ui.theme.BlackAndWhiteAppPalette
+import com.example.ui.theme.RedAppPalette
+import com.example.ui.theme.ThemePreferenceStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -842,6 +844,8 @@ fun FloatingCounterBubbleComposable(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val state by FloatingCounterManager.state.collectAsState()
+    val themeMode by ThemePreferenceStore.themeModeFlow(context).collectAsState()
+    val palette = if (themeMode == AppThemeMode.RED) RedAppPalette else BlackAndWhiteAppPalette
 
     if (!state.isRunning) return
 
@@ -915,8 +919,8 @@ fun FloatingCounterBubbleComposable(
                     if (size.height > 0) measuredBubbleH = size.height.toFloat()
                 }
                 .clip(bubbleShape)
-                .background(PureBlack)
-                .border(1.5.dp, PureWhite, bubbleShape)
+                .background(palette.accent)
+                .border(1.5.dp, palette.onAccent, bubbleShape)
                 .pointerInput(stageWidthPx, stageHeightPx, state.mode, state.activeGroupId) {
                     detectTapGestures(
                         onTap = {
@@ -994,7 +998,7 @@ fun FloatingCounterBubbleComposable(
                                 fontSize = 9.sp,
                                 lineHeight = 11.sp
                             ),
-                            color = PureWhite.copy(alpha = 0.78f),
+                            color = palette.onAccent.copy(alpha = 0.78f),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.testTag("group_floating_pill_name")
@@ -1007,7 +1011,7 @@ fun FloatingCounterBubbleComposable(
                             lineHeight = 16.sp,
                             fontWeight = FontWeight.Bold
                         ),
-                        color = PureWhite,
+                        color = palette.onAccent,
                         maxLines = 1,
                         modifier = Modifier.testTag("group_floating_pill_total")
                     )
@@ -1018,7 +1022,7 @@ fun FloatingCounterBubbleComposable(
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontSize = if (flashingNum < 100L) 18.sp else 14.sp
                     ),
-                    color = PureWhite,
+                    color = palette.onAccent,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.testTag("floating_counter_flash_number")
                 )
@@ -1036,9 +1040,9 @@ fun FloatingCounterBubbleComposable(
                 targetValue = if (state.isOverCloseTarget) hoveredSizeDp else restingSizeDp,
                 label = "close_target_size"
             )
-            val fillColor = if (state.isOverCloseTarget) PureBlack else PureWhite
-            val borderColor = if (state.isOverCloseTarget) PureWhite else PureBlack
-            val iconTint = if (state.isOverCloseTarget) PureWhite else PureBlack
+            val fillColor = if (state.isOverCloseTarget) palette.accent else palette.cardSurface
+            val borderColor = if (state.isOverCloseTarget) palette.onAccent else palette.onCard
+            val iconTint = if (state.isOverCloseTarget) palette.onAccent else palette.onCard
 
             Box(
                 contentAlignment = Alignment.Center,

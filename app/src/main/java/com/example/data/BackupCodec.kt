@@ -23,7 +23,8 @@ data class BackupPayload(
     val remindersEnabled: Boolean?,
     val startedAtMillis: Long? = null,
     val days: List<Pair<String, Long>>,
-    val customCounters: List<BackupCustomCounter>
+    val customCounters: List<BackupCustomCounter>,
+    val themeMode: String? = null
 )
 
 object BackupCodec {
@@ -49,6 +50,7 @@ object BackupCodec {
                     put("reminder2Minute", profile.reminder2Minute)
                     put("remindersEnabled", profile.remindersEnabled)
                     put("startedAtMillis", profile.startedAtMillis)
+                    put("themeMode", com.example.ui.theme.AppThemeMode.fromStorageKey(profile.themeMode).storageKey)
                 })
             }
             val arr = JSONArray()
@@ -115,7 +117,10 @@ object BackupCodec {
             },
             startedAtMillis = profileObj?.optLong("startedAtMillis", 0L)?.takeIf { it > 0L },
             days = days,
-            customCounters = counters
+            customCounters = counters,
+            themeMode = profileObj?.optString("themeMode")?.takeIf { it.isNotBlank() }?.let {
+                com.example.ui.theme.AppThemeMode.fromStorageKey(it).storageKey
+            }
         )
     }
 

@@ -37,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -54,14 +55,15 @@ import androidx.compose.ui.window.DialogProperties
 import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import com.example.announcements.AnnouncementItem
-import com.example.ui.theme.HairlineGrey
-import com.example.ui.theme.OffWhite
+import com.example.ui.theme.AppThemeColors
 import com.example.ui.theme.PureBlack
-import com.example.ui.theme.PureWhite
 
 private val URL_REGEX = Regex("""https?://[^\s<>()]+""")
 
-internal fun buildLinkifiedAnnouncementBody(body: String): AnnotatedString {
+internal fun buildLinkifiedAnnouncementBody(
+    body: String,
+    linkColor: Color = PureBlack
+): AnnotatedString {
     return buildAnnotatedString {
         append(body)
         URL_REGEX.findAll(body).forEach { match ->
@@ -75,7 +77,7 @@ internal fun buildLinkifiedAnnouncementBody(body: String): AnnotatedString {
                         url = trimmedUrl,
                         styles = TextLinkStyles(
                             style = SpanStyle(
-                                color = PureBlack,
+                                color = linkColor,
                                 fontWeight = FontWeight.SemiBold,
                                 textDecoration = TextDecoration.Underline
                             )
@@ -96,8 +98,9 @@ fun AnnouncementDialog(
     onActionClick: (AnnouncementItem) -> Unit
 ) {
     val context = LocalContext.current
-    val linkifiedBody = remember(announcement.body) {
-        buildLinkifiedAnnouncementBody(announcement.body)
+    val palette = AppThemeColors.palette
+    val linkifiedBody = remember(announcement.body, palette.accent) {
+        buildLinkifiedAnnouncementBody(announcement.body, linkColor = palette.accent)
     }
     val bannerUrl = announcement.imageUrl?.takeIf { it.isNotBlank() }
     var imageLoadFailed by remember(bannerUrl) { mutableStateOf(false) }
@@ -117,7 +120,7 @@ fun AnnouncementDialog(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(PureBlack.copy(alpha = 0.45f))
+                .background(palette.scrim)
                 .clickable(
                     interactionSource = scrimInteraction,
                     indication = null,
@@ -127,14 +130,14 @@ fun AnnouncementDialog(
             contentAlignment = Alignment.Center
         ) {
             Surface(
-                color = PureWhite,
+                color = palette.cardSurface,
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .padding(horizontal = 24.dp, vertical = 24.dp)
                     .widthIn(max = 420.dp)
                     .heightIn(max = 600.dp)
                     .fillMaxWidth()
-                    .border(1.dp, PureBlack, RoundedCornerShape(16.dp))
+                    .border(1.dp, palette.strongBorder, RoundedCornerShape(16.dp))
                     .clickable(
                         interactionSource = cardInteraction,
                         indication = null,
@@ -159,7 +162,7 @@ fun AnnouncementDialog(
                                 .fillMaxWidth()
                                 .height(168.dp)
                                 .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-                                .background(OffWhite)
+                                .background(palette.subtleSurface)
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = null,
@@ -174,7 +177,7 @@ fun AnnouncementDialog(
                                 modifier = Modifier.fillMaxSize()
                             )
                         }
-                        HorizontalDivider(color = HairlineGrey, thickness = 1.dp)
+                        HorizontalDivider(color = palette.hairline, thickness = 1.dp)
                     }
 
                     Column(
@@ -201,7 +204,7 @@ fun AnnouncementDialog(
                             ) {
                                 if (announcement.isUrgent) {
                                     Surface(
-                                        color = PureBlack,
+                                        color = palette.accent,
                                         shape = RoundedCornerShape(999.dp),
                                         modifier = Modifier
                                             .semantics(mergeDescendants = true) {}
@@ -210,7 +213,7 @@ fun AnnouncementDialog(
                                         Text(
                                             text = "URGENT",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = PureWhite,
+                                            color = palette.onAccent,
                                             fontWeight = FontWeight.Bold,
                                             maxLines = 1,
                                             softWrap = false,
@@ -222,7 +225,7 @@ fun AnnouncementDialog(
                                     Text(
                                         text = announcement.title,
                                         style = MaterialTheme.typography.titleLarge,
-                                        color = PureBlack,
+                                        color = palette.onCard,
                                         fontWeight = FontWeight.SemiBold,
                                         modifier = Modifier
                                             .clickable(
@@ -244,7 +247,7 @@ fun AnnouncementDialog(
                                 Icon(
                                     imageVector = Icons.Filled.Close,
                                     contentDescription = "Close announcement",
-                                    tint = PureBlack,
+                                    tint = palette.onCard,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
@@ -260,7 +263,7 @@ fun AnnouncementDialog(
                                 Text(
                                     text = linkifiedBody,
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = PureBlack,
+                                    color = palette.onCard,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(end = 8.dp)

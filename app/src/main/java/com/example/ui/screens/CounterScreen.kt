@@ -32,7 +32,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -63,10 +62,8 @@ import com.example.ui.components.OfflineSyncBadge
 import com.example.ui.components.RollingNumberText
 import com.example.ui.components.formatNumber
 import com.example.ui.components.rememberReduceMotion
-import com.example.ui.theme.HairlineGrey
-import com.example.ui.theme.PureBlack
-import com.example.ui.theme.PureWhite
-import com.example.ui.theme.SubtextGrey
+import com.example.ui.theme.AppThemeColors
+import com.example.ui.theme.appOutlinedTextFieldColors
 
 @Composable
 fun CounterScreen(
@@ -80,6 +77,7 @@ fun CounterScreen(
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
     val reduceMotion = rememberReduceMotion()
+    val palette = AppThemeColors.palette
     var showCustomDialog by remember { mutableStateOf(initialShowCustomDialog) }
 
     LaunchedEffect(initialShowCustomDialog) {
@@ -126,18 +124,19 @@ fun CounterScreen(
                 Text(
                     text = "TOTAL DUROOD PAK",
                     style = MaterialTheme.typography.labelSmall,
-                    color = SubtextGrey
+                    color = palette.onCanvasSubtext
                 )
                 RollingNumberText(
                     value = uiState.totalCount,
                     style = MaterialTheme.typography.displayMedium,
-                    reduceMotion = reduceMotion
+                    reduceMotion = reduceMotion,
+                    color = palette.onCanvas
                 )
                 Text(
                     text = "Today: ${formatNumber(uiState.todayCount)} / ${formatNumber(uiState.dailyTarget.toLong())}" +
                         if (uiState.todayCount >= uiState.dailyTarget) " · Target Complete" else "",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (uiState.todayCount >= uiState.dailyTarget) PureBlack else SubtextGrey,
+                    color = if (uiState.todayCount >= uiState.dailyTarget) palette.onCanvas else palette.onCanvasSubtext,
                     fontWeight = if (uiState.todayCount >= uiState.dailyTarget) FontWeight.SemiBold else FontWeight.Normal
                 )
             }
@@ -157,7 +156,7 @@ fun CounterScreen(
                             scaleY = buttonScale
                         }
                         .clip(CircleShape)
-                        .background(PureBlack)
+                        .background(palette.accent)
                         .clickable(
                             interactionSource = tapInteraction,
                             indication = null,
@@ -175,14 +174,14 @@ fun CounterScreen(
                         Text(
                             text = "+1",
                             style = MaterialTheme.typography.displayLarge,
-                            color = PureWhite,
+                            color = palette.onAccent,
                             fontWeight = FontWeight.Bold
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "TAP",
                             style = MaterialTheme.typography.labelMedium,
-                            color = PureWhite.copy(alpha = 0.72f)
+                            color = palette.onAccent.copy(alpha = 0.78f)
                         )
                     }
                 }
@@ -200,7 +199,7 @@ fun CounterScreen(
                     Text(
                         text = "Custom Counters",
                         style = MaterialTheme.typography.labelLarge,
-                        color = PureBlack,
+                        color = palette.onCanvas,
                         fontWeight = FontWeight.Medium
                     )
                 }
@@ -225,18 +224,19 @@ internal fun CustomAmountDialog(
     onDismiss: () -> Unit,
     onConfirm: (Long) -> Unit
 ) {
+    val palette = AppThemeColors.palette
     var input by remember { mutableStateOf("") }
     val parsed = input.toLongOrNull()?.takeIf { it in 1L..1_000_000L }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = PureWhite,
+        containerColor = palette.cardSurface,
         shape = RoundedCornerShape(16.dp),
         title = {
             Text(
                 text = "Add Custom Amount",
                 style = MaterialTheme.typography.titleLarge,
-                color = PureBlack
+                color = palette.onCard
             )
         },
         text = {
@@ -244,7 +244,7 @@ internal fun CustomAmountDialog(
                 Text(
                     text = "How many would you like to add to today's count?",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = SubtextGrey
+                    color = palette.onCardSubtext
                 )
                 OutlinedTextField(
                     value = input,
@@ -252,12 +252,7 @@ internal fun CustomAmountDialog(
                     label = { Text("Enter Amount") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PureBlack,
-                        unfocusedBorderColor = HairlineGrey,
-                        focusedLabelColor = PureBlack,
-                        cursorColor = PureBlack
-                    ),
+                    colors = appOutlinedTextFieldColors(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("custom_amount_input")
@@ -267,7 +262,7 @@ internal fun CustomAmountDialog(
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = onDismiss) {
-                    Text("Cancel", color = SubtextGrey)
+                    Text("Cancel", color = palette.onCardSubtext)
                 }
                 BlackPillButton(
                     text = "Add",

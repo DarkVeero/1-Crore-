@@ -19,7 +19,8 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:orientation="vertical"
-            android:paddingEnd="2dp">
+            android:paddingStart="6dp"
+        android:paddingEnd="2dp">
 
             <TextView
                 android:id="@+id/widget_today_label"
