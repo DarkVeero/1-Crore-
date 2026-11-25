@@ -5,9 +5,4 @@
         android:height="288dp"
         android:drawable="@drawable/bg_splash_grid_288"
         android:gravity="center" />
-    <item
-        android:width="144dp"
-        android:height="144dp"
-        android:drawable="@drawable/bg_launch_logo_tile"
-        android:gravity="center" />
-</layer-list>
+    </layer-list>

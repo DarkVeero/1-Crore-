@@ -32,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Path
@@ -433,6 +434,8 @@ private fun V11SplashWaveStage(
     val waveProgress = frame.waveProgress
     val creditT = frame.creditT
     val ringT = frame.ringT
+    // Seamless cold-start handoff: frame 0 must match the system splash (white + logo tile only), so fade the faint grid + footer credit in over the first 250 ms instead of popping them in as a second frame.r 
+    val introAlpha = if (showStaticFinal) 1f else (elapsedMsProvider() / 250f).coerceIn(0f, 1f)
 
     val splashCleared = !showStaticFinal && waveProgress >= 1f
     val clipPath = remember { Path() }
@@ -474,7 +477,7 @@ private fun V11SplashWaveStage(
                         }
                     }
             ) {
-                FaintGridBackground(reduceMotion = reduceMotion)
+                FaintGridBackground(modifier = Modifier.alpha(introAlpha), reduceMotion = reduceMotion)
 
                 Box(
                     contentAlignment = Alignment.Center,
@@ -501,6 +504,7 @@ private fun V11SplashWaveStage(
                                 .align(Alignment.BottomCenter)
                                 .safeDrawingPadding()
                                 .padding(bottom = 26.dp)
+                                .alpha(introAlpha)
                                 .testTag("splash_credit_name")
                         )
                     }
