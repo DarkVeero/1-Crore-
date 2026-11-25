@@ -863,8 +863,8 @@ object GroupRepository {
                         todayDateKey = todayDateKey,
                         lifetimeTotalCount = (member.lifetimeTotalCount + delta).coerceAtLeast(0L),
                         weeklyCount = (baseWeekly + delta).coerceAtLeast(0L),
+                    updatedAtMillis = maxOf(group.updatedAtMillis + 1L, nowMillis)
                         weeklyDateKey = currentWeekKey,
-                        updatedAtMillis = nowMillis
                     )
                 } else {
                     member
@@ -880,7 +880,7 @@ object GroupRepository {
                 lifetimeTotalCount = clampedDelta,
                 weeklyCount = clampedDelta,
                 weeklyDateKey = currentWeekKey(),
-                updatedAtMillis = nowMillis
+                updatedAtMillis = maxOf(group.updatedAtMillis + 1L, nowMillis)
             )
         }
 
@@ -888,7 +888,7 @@ object GroupRepository {
         val updatedGroup = group.copy(
             members = newMembers,
             serverTotalCount = newSum,
-            updatedAtMillis = nowMillis
+            updatedAtMillis = maxOf(group.updatedAtMillis + 1L, nowMillis)
         )
         allGroups[groupId] = updatedGroup
         writeAllGroups(context, allGroups)

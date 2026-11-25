@@ -267,32 +267,11 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
     }
 
     suspend fun setDayCount(userId: String, dateKey: String, newCount: Long) {
-        val clamped = newCount.coerceIn(0L, 100_000_000L)
-        dailyDao.upsertDay(
-            DailyCountEntity(
-                userId = userId,
-                dateKey = dateKey,
-                count = clamped,
-                pendingSync = true,
-                isManualEdit = true,
-                updatedAtMillis = System.currentTimeMillis()
-            )
-        )
+        dailyDao.setDayCount(userId, dateKey, newCount, System.currentTimeMillis())
     }
 
     suspend fun adjustDayCount(userId: String, dateKey: String, delta: Long) {
-        val current = dailyDao.getDay(userId, dateKey)?.count ?: 0L
-        val newCount = (current + delta).coerceIn(0L, 100_000_000L)
-        dailyDao.upsertDay(
-            DailyCountEntity(
-                userId = userId,
-                dateKey = dateKey,
-                count = newCount,
-                pendingSync = true,
-                isManualEdit = true,
-                updatedAtMillis = System.currentTimeMillis()
-            )
-        )
+        dailyDao.adjustDay(userId, dateKey, delta, System.currentTimeMillis())
     }
 
     suspend fun createCustomCounter(userId: String, name: String, targetCount: Long): String {
@@ -367,7 +346,9 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
         return encoded
     }
 
-    suspend fun restoreBackupJson(userId: String, jsonText: String): Result<Int> {
+    data class RestoreOutcome(val restoredItems: Int, val skippedEntries: Int)
+
+    suspend fun restoreBackupJson(userId: String, jsonText: String): Result<RestoreOutcome> {
         return try {
             // 1. Pre-restore verification gate: verify backup file decodes and round-trips cleanly
             val payload = BackupCodec.verifyBackupRoundTrip(jsonText).getOrElse { err ->
@@ -433,13 +414,14 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
             }
             for (counter in payload.customCounters) {
                 val localExisting = customDao.getCounter(counter.id)
+                if (localExisting?.isDeleted == true) continue
                 val mergedCount = maxOf(localExisting?.currentCount ?: 0L, counter.currentCount)
                 customDao.upsertCounter(
                     CustomCounterEntity(
                         id = counter.id,
                         userId = userId,
-                        name = counter.name,
-                        targetCount = counter.targetCount,
+                        name = localExisting?.name ?: counter.name,
+                        targetCount = localExisting?.targetCount ?: counter.targetCount,
                         currentCount = mergedCount,
                         pendingSync = true,
                         isManualEdit = false,
@@ -464,7 +446,7 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
                 }
             }
 
-            Result.success(restoredItems)
+            Result.success(RestoreOutcome(restoredItems, payload.droppedDays + payload.droppedCounters)))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -498,33 +480,33 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
                 throw e
             } catch (e: Exception) {
                 handleFirestoreError(e, OperationType.GET, profileRef.path, auth)
-                throw e
+            null
             }
 
-            val cloudProfile = cloudProfileSnap.toObject(FirestoreUserProfile::class.java)
-            val rawCreatedAtMillis = runCatching { cloudProfileSnap.getTimestamp("createdAt")?.toDate()?.time }.getOrNull()
+            val cloudProfile = cloudProfileSnap?.toObject(FirestoreUserProfile::class.java)
+            val rawCreatedAtMillis = runCatching { cloudProfileSnap?.getTimestamp("createdAt")?.toDate()?.time }.getOrNull()
                 ?: cloudProfile?.createdAt?.toDate()?.time
                 ?: 0L
-            val rawStartDateMillis = runCatching { cloudProfileSnap.getTimestamp("startDate")?.toDate()?.time }.getOrNull()
-                ?: runCatching { cloudProfileSnap.getLong("startDate") }.getOrNull()
-                ?: runCatching { cloudProfileSnap.getLong("startedAtMillis") }.getOrNull()
+            val rawStartDateMillis = runCatching { cloudProfileSnap?.getTimestamp("startDate")?.toDate()?.time }.getOrNull()
+                ?: runCatching { cloudProfileSnap?.getLong("startDate") }.getOrNull()
+                ?: runCatching { cloudProfileSnap?.getLong("startedAtMillis") }.getOrNull()
                 ?: 0L
             val cloudStartedMillis = listOfNotNull(
                 rawStartDateMillis.takeIf { it > 0L },
                 rawCreatedAtMillis.takeIf { it > 0L }
             ).minOrNull() ?: 0L
-            val rawDailyTarget = runCatching { cloudProfileSnap.getLong("dailyTarget") }.getOrNull()
+            val rawDailyTarget = runCatching { cloudProfileSnap?.getLong("dailyTarget") }.getOrNull()
                 ?: cloudProfile?.dailyTarget
                 ?: 0L
-            val rawSetupFlag = (runCatching { cloudProfileSnap.getBoolean("setupCompleted") }.getOrNull() == true) ||
-                (runCatching { cloudProfileSnap.getBoolean("setupComplete") }.getOrNull() == true) ||
+            val rawSetupFlag = (runCatching { cloudProfileSnap?.getBoolean("setupCompleted") }.getOrNull() == true) ||
+                (runCatching { cloudProfileSnap?.getBoolean("setupComplete") }.getOrNull() == true) ||
                 (cloudProfile?.setupCompleted == true)
-            val cloudDocHasSetup = cloudProfileSnap.exists() && (
+            val cloudDocHasSetup = (cloudProfileSnap?.exists() == true) && (
                 rawSetupFlag ||
-                    (rawDailyTarget > 0L && (cloudStartedMillis > 0L || cloudProfileSnap.contains("dailyTarget")))
+                    (rawDailyTarget > 0L && (cloudStartedMillis > 0L || cloudProfileSnap?.contains("dailyTarget") == true))
                 )
 
-            if (cloudProfile == null || !cloudProfileSnap.exists()) {
+            if (cloudProfileSnap != null && (cloudProfile == null || !cloudProfileSnap.exists())) {
                 if (localProfile != null && localProfile.setupCompleted) {
                     val createPayload = mapOf(
                         "userId" to uid,
@@ -538,6 +520,7 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
                         "remindersEnabled" to localProfile.remindersEnabled,
                         "themeMode" to com.example.ui.theme.AppThemeMode.fromStorageKey(localProfile.themeMode).storageKey,
                         "createdAt" to FieldValue.serverTimestamp(),
+                        "startedAtMillis" to localProfile.startedAtMillis,
                         "updatedAt" to FieldValue.serverTimestamp()
                     )
                     try {
@@ -549,7 +532,7 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
                         throw e
                     }
                 }
-            } else if (localProfile == null || (!localProfile.pendingSync && cloudDocHasSetup) || (!localProfile.setupCompleted && cloudDocHasSetup)) {
+            } else if (cloudProfileSnap != null && cloudProfile != null && (localProfile == null || (!localProfile.pendingSync && cloudDocHasSetup) || (!localProfile.setupCompleted && cloudDocHasSetup))) {
                 val localStarted = localProfile?.startedAtMillis?.takeIf { it > 0L }
                 val cloudStarted = cloudStartedMillis.takeIf { it > 0L }
                 val resolvedStartedAt = when {
@@ -559,17 +542,17 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
                 val resolvedTarget = (if (rawDailyTarget > 0L) rawDailyTarget else cloudProfile.dailyTarget)
                     .toInt()
                     .coerceIn(1, ONE_CRORE.toInt())
-                val resolvedR1Hour = (runCatching { cloudProfileSnap.getLong("reminder1Hour") }.getOrNull()
+                val resolvedR1Hour = (runCatching { cloudProfileSnap?.getLong("reminder1Hour") }.getOrNull()
                     ?: cloudProfile.reminder1Hour).toInt().coerceIn(0, 23)
-                val resolvedR1Minute = (runCatching { cloudProfileSnap.getLong("reminder1Minute") }.getOrNull()
+                val resolvedR1Minute = (runCatching { cloudProfileSnap?.getLong("reminder1Minute") }.getOrNull()
                     ?: cloudProfile.reminder1Minute).toInt().coerceIn(0, 59)
-                val resolvedR2Hour = (runCatching { cloudProfileSnap.getLong("reminder2Hour") }.getOrNull()
+                val resolvedR2Hour = (runCatching { cloudProfileSnap?.getLong("reminder2Hour") }.getOrNull()
                     ?: cloudProfile.reminder2Hour).toInt().coerceIn(0, 23)
-                val resolvedR2Minute = (runCatching { cloudProfileSnap.getLong("reminder2Minute") }.getOrNull()
+                val resolvedR2Minute = (runCatching { cloudProfileSnap?.getLong("reminder2Minute") }.getOrNull()
                     ?: cloudProfile.reminder2Minute).toInt().coerceIn(0, 59)
-                val resolvedRemindersEnabled = runCatching { cloudProfileSnap.getBoolean("remindersEnabled") }.getOrNull()
+                val resolvedRemindersEnabled = runCatching { cloudProfileSnap?.getBoolean("remindersEnabled") }.getOrNull()
                     ?: cloudProfile.remindersEnabled
-                val rawCloudTheme = runCatching { cloudProfileSnap.getString("themeMode") }.getOrNull()
+                val rawCloudTheme = runCatching { cloudProfileSnap?.getString("themeMode") }.getOrNull()
                     ?: cloudProfile.themeMode
                 val resolvedThemeMode = if (localProfile != null && localProfile.pendingSync && !localProfile.setupCompleted) {
                     com.example.ui.theme.AppThemeMode.fromStorageKey(localProfile.themeMode).storageKey
@@ -607,12 +590,13 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
                     } catch (_: Exception) {
                     }
                 }
-            } else if (localProfile.pendingSync && localProfile.setupCompleted) {
+            } else if (cloudProfileSnap != null && localProfile.pendingSync && localProfile.setupCompleted) {
                 val cloudStarted = cloudStartedMillis.takeIf { it > 0L }
                 if (cloudStarted != null && (localProfile.startedAtMillis <= 0L || cloudStarted < localProfile.startedAtMillis)) {
                     profileDao.upsertProfile(localProfile.copy(startedAtMillis = cloudStarted))
                 }
                 val updatePayload = mapOf(
+                    "startedAtMillis" to (cloudStarted?.takeIf { localProfile.startedAtMillis <= 0L || it < localProfile.startedAtMillis } ?: localProfile.startedAtMillis),
                     "displayName" to localProfile.displayName.ifBlank { "Friend" }.take(80),
                     "dailyTarget" to localProfile.dailyTarget.toLong(),
                     "setupCompleted" to true,
@@ -820,10 +804,11 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
                 )
                 val healedLocal = profileDao.getProfile(uid)
                 if (healedLocal != null) {
-                    if (!cloudProfileSnap.exists()) {
+                    if (cloudProfileSnap != null && !cloudProfileSnap.exists()) {
                         val createPayload = mapOf(
                             "userId" to uid,
                             "displayName" to healedLocal.displayName.ifBlank { "Friend" }.take(80),
+                            "startedAtMillis" to healedLocal.startedAtMillis,
                             "dailyTarget" to healedLocal.dailyTarget.toLong(),
                             "setupCompleted" to true,
                             "reminder1Hour" to healedLocal.reminder1Hour.toLong(),
@@ -840,9 +825,10 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
                             throw e
                         } catch (_: Exception) {
                         }
-                    } else if (!cloudDocHasSetup || cloudProfile?.setupCompleted != true) {
+                    } else if (cloudProfileSnap != null && (!cloudDocHasSetup || cloudProfile?.setupCompleted != true)) {
                         val updatePayload = mapOf(
                             "displayName" to healedLocal.displayName.ifBlank { "Friend" }.take(80),
+                            "startedAtMillis" to healedLocal.startedAtMillis,
                             "dailyTarget" to healedLocal.dailyTarget.toLong(),
                             "setupCompleted" to true,
                             "reminder1Hour" to healedLocal.reminder1Hour.toLong(),
@@ -1194,7 +1180,7 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
             val parsed = GlobalStatsCache.parseGlobalStatsDocument(
                 exists = snapshot.exists(),
                 data = rawMap,
-                fetchedAtMillis = nowMillis
+                fetchedAtMillis = if (snapshot.metadata.isFromCache) (cached?.fetchedAtMillis ?: nowMillis) else nowMillis
             )
             when {
                 parsed != null -> {
@@ -1348,7 +1334,7 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
             val parsed = GlobalStatsCache.parseGlobalStatsDocument(
                 exists = snapshot.exists(),
                 data = rawMap,
-                fetchedAtMillis = nowMillis
+                fetchedAtMillis = if (snapshot.metadata.isFromCache) (GlobalStatsCache.getCached(context)?.fetchedAtMillis ?: nowMillis) else nowMillis
             )
             if (parsed != null) {
                 GlobalStatsCache.saveCached(context, parsed)

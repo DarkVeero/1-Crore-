@@ -1059,7 +1059,7 @@ class MainViewModel(
                 }
             }
             statusMessageFlow.value = result.fold(
-                onSuccess = { items -> "Restored $items records safely (higher local counts preserved)." },
+                onSuccess = { outcome -> "Restored ${outcome.restoredItems} records safely (higher local counts preserved)." + if (outcome.skippedEntries > 0) " ${outcome.skippedEntries} entries skipped." else "" },
                 onFailure = { "Invalid backup file." }
             )
             SyncWorker.enqueueWhenOnline(appContext)

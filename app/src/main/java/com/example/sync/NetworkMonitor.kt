@@ -31,6 +31,8 @@ object NetworkMonitor {
         return isActiveNetworkOnline(cm)
     }
 
+    // hasNetworkConnection reports ANY interface with INTERNET capability - not
+    // necessarily the active/default route. Prefer isCurrentlyOnline for sync gating.
     fun hasNetworkConnection(context: Context): Boolean {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
             ?: return false
@@ -58,11 +60,13 @@ object NetworkMonitor {
 
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
-                trySend(isActiveNetworkOnline(cm))
+            val caps = cm.getNetworkCapabilities(network)
+            trySend(if (caps != null) hasInternet(caps) else isActiveNetworkOnline(cm))
             }
 
             override fun onLost(network: Network) {
-                trySend(isActiveNetworkOnline(cm))
+            val caps = cm.getNetworkCapabilities(network)
+            trySend(if (caps != null) hasInternet(caps) else isActiveNetworkOnline(cm))
             }
 
             override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {

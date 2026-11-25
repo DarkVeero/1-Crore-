@@ -5,6 +5,8 @@ import com.example.data.local.DailyCountEntity
 import com.example.data.local.UserProfileEntity
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.LocalDate
+import java.time.format.DateTimeParseException
 
 data class BackupCustomCounter(
     val id: String,
@@ -24,12 +26,24 @@ data class BackupPayload(
     val startedAtMillis: Long? = null,
     val days: List<Pair<String, Long>>,
     val customCounters: List<BackupCustomCounter>,
-    val themeMode: String? = null
+    val themeMode: String? = null,
+    val droppedDays: Int = 0,
+    val droppedCounters: Int = 0
 )
 
 object BackupCodec {
     private val dateRegex = Regex("^\\d{4}-\\d{2}-\\d{2}$")
     private val idRegex = Regex("^[a-zA-Z0-9_\\-]+$")
+
+    private fun isValidDateKey(dateKey: String): Boolean {
+        if (!dateRegex.matches(dateKey)) return false
+        return try {
+            LocalDate.parse(dateKey)
+            true
+        } catch (_: DateTimeParseException) {
+            false
+        }
+    }
 
     fun encode(
         profile: UserProfileEntity?,
@@ -85,7 +99,7 @@ object BackupCodec {
                 val item = arr.optJSONObject(i) ?: continue
                 val dateKey = item.optString("dateKey", "").trim()
                 val count = item.optLong("count", -1L)
-                if (dateRegex.matches(dateKey) && count >= 0L) {
+                if (isValidDateKey(dateKey) && count >= 0L) {
                     add(dateKey to count)
                 }
             }
@@ -118,6 +132,8 @@ object BackupCodec {
             startedAtMillis = profileObj?.optLong("startedAtMillis", 0L)?.takeIf { it > 0L },
             days = days,
             customCounters = counters,
+        droppedDays = arr.length() - days.size,
+        droppedCounters = countersArr.length() - counters.size,
             themeMode = profileObj?.optString("themeMode")?.takeIf { it.isNotBlank() }?.let {
                 com.example.ui.theme.AppThemeMode.fromStorageKey(it).storageKey
             }

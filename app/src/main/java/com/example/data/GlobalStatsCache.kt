@@ -15,7 +15,6 @@ data class GlobalCounterStats(
 
 object GlobalStatsCache {
     const val ONE_HOUR_MILLIS = 60L * 60L * 1000L
-    const val TWELVE_HOURS_MILLIS = ONE_HOUR_MILLIS
     private const val PREFS_NAME = "one_crore_global_stats_cache"
     private const val KEY_HAS_VALUE = "has_value"
     private const val KEY_TOTAL_COUNT = "total_count"
@@ -35,7 +34,7 @@ object GlobalStatsCache {
         return ageMillis < 0L || ageMillis >= ONE_HOUR_MILLIS
     }
 
-    private fun parsePositiveLong(raw: Any?): Long? {
+    private fun parseNonNegativeLong(raw: Any?): Long? {
         val value = when (raw) {
             is Number -> raw.toLong()
             is String -> {
@@ -44,7 +43,7 @@ object GlobalStatsCache {
             }
             else -> null
         }
-        return value?.takeIf { it > 0L }
+        return value?.takeIf { it >= 0L }
     }
 
     internal fun parseMilestoneList(raw: Any?): List<Long> {
@@ -73,8 +72,8 @@ object GlobalStatsCache {
         fetchedAtMillis: Long
     ): GlobalCounterStats? {
         if (!exists || data == null) return null
-        val totalCount = parsePositiveLong(data["totalCount"]) ?: return null
-        val userCount = parsePositiveLong(data["userCount"]) ?: return null
+        val totalCount = parseNonNegativeLong(data["totalCount"]) ?: return null
+        val userCount = parseNonNegativeLong(data["userCount"]) ?: return null
         val sentMilestones = parseMilestoneList(
             data["sentMilestones"] ?: data["milestonesSent"] ?: data["milestones"]
         )
@@ -127,7 +126,7 @@ object GlobalStatsCache {
         val total = prefs.getLong(KEY_TOTAL_COUNT, 0L)
         val users = prefs.getLong(KEY_USER_COUNT, 0L)
         val fetchedAt = prefs.getLong(KEY_FETCHED_AT_MILLIS, 0L)
-        if (total <= 0L || users <= 0L || fetchedAt <= 0L) return null
+        if (total < 0L || users < 0L || fetchedAt <= 0L) return null
         val sentMilestones = prefs.getString(KEY_SENT_MILESTONES, null)
             ?.split(",")
             ?.mapNotNull { it.trim().toLongOrNull()?.takeIf { v -> v > 0L } }
@@ -143,7 +142,7 @@ object GlobalStatsCache {
     }
 
     fun saveCached(context: Context, stats: GlobalCounterStats) {
-        if (stats.totalCount <= 0L || stats.userCount <= 0L) return
+        if (stats.totalCount < 0L || stats.userCount < 0L) return
         context.applicationContext
             .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()

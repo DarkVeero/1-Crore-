@@ -1,6 +1,7 @@
 package com.example.sync
 
 import android.content.Context
+import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
@@ -24,10 +25,10 @@ class SyncWorker(
         val currentUser = Firebase.auth.currentUser ?: return Result.success()
         val repository = DuroodRepository(applicationContext)
         val syncResult = repository.syncWithCloud()
-        runCatching {
+        val groupFlushResult = runCatching {
             com.example.groups.GroupRepository.flushDirtyGroupsToCloud(applicationContext, currentUser.uid)
         }
-        return if (syncResult.isSuccess) Result.success() else Result.retry()
+        return if (syncResult.isSuccess && groupFlushResult.isSuccess) Result.success() else Result.retry()
     }
 
     companion object {
@@ -41,10 +42,11 @@ class SyncWorker(
                 .build()
             val request = OneTimeWorkRequestBuilder<SyncWorker>()
                 .setConstraints(constraints)
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .build()
             try {
                 WorkManager.getInstance(appContext)
-                    .enqueueUniqueWork(UNIQUE_SYNC_WORK, ExistingWorkPolicy.KEEP, request)
+                    .enqueueUniqueWork(UNIQUE_SYNC_WORK, ExistingWorkPolicy.REPLACE, request)
             } catch (_: IllegalStateException) {
                 // Ignored in test environments where WorkManager is intentionally uninitialized
             }
@@ -60,6 +62,7 @@ class SyncWorker(
                 .build()
             val request = PeriodicWorkRequestBuilder<SyncWorker>(15, TimeUnit.MINUTES)
                 .setConstraints(constraints)
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .build()
             try {
                 WorkManager.getInstance(appContext)

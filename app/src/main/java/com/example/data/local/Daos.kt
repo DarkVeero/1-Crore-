@@ -79,7 +79,7 @@ interface DailyCountDao {
     suspend fun incrementDay(userId: String, dateKey: String, delta: Long, nowMillis: Long) {
         if (delta <= 0L) return
         val existing = getDay(userId, dateKey)
-        val newCount = (existing?.count ?: 0L) + delta
+        val newCount = ((existing?.count ?: 0L) + delta).coerceIn(0L, 100_000_000L)
         upsertDay(
             DailyCountEntity(
                 userId = userId,
@@ -87,6 +87,37 @@ interface DailyCountDao {
                 count = newCount,
                 pendingSync = true,
                 isManualEdit = existing?.isManualEdit ?: false,
+                updatedAtMillis = nowMillis
+            )
+        )
+    }
+
+    @Transaction
+    suspend fun adjustDay(userId: String, dateKey: String, delta: Long, nowMillis: Long) {
+        if (delta == 0L) return
+        val existing = getDay(userId, dateKey)
+        val newCount = ((existing?.count ?: 0L) + delta).coerceIn(0L, 100_000_000L)
+        upsertDay(
+            DailyCountEntity(
+                userId = userId,
+                dateKey = dateKey,
+                count = newCount,
+                pendingSync = true,
+                isManualEdit = true,
+                updatedAtMillis = nowMillis
+            )
+        )
+    }
+
+    @Transaction
+    suspend fun setDayCount(userId: String, dateKey: String, count: Long, nowMillis: Long) {
+        upsertDay(
+            DailyCountEntity(
+                userId = userId,
+                dateKey = dateKey,
+                count = count.coerceIn(0L, 100_000_000L),
+                pendingSync = true,
+                isManualEdit = true,
                 updatedAtMillis = nowMillis
             )
         )
@@ -132,7 +163,7 @@ interface CustomCounterDao {
         if (existing.userId != userId || existing.isDeleted) return
         upsertCounter(
             existing.copy(
-                currentCount = existing.currentCount + delta,
+                currentCount = (existing.currentCount + delta).coerceIn(0L, 100_000_000L),
                 pendingSync = true,
                 updatedAtMillis = nowMillis
             )
