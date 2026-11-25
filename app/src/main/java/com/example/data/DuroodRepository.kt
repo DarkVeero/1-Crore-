@@ -590,7 +590,7 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
                     } catch (_: Exception) {
                     }
                 }
-            } else if (cloudProfileSnap != null && localProfile.pendingSync && localProfile.setupCompleted) {
+            } else if (cloudProfileSnap != null && localProfile != null && localProfile.pendingSync && localProfile.setupCompleted) {
                 val cloudStarted = cloudStartedMillis.takeIf { it > 0L }
                 if (cloudStarted != null && (localProfile.startedAtMillis <= 0L || cloudStarted < localProfile.startedAtMillis)) {
                     profileDao.upsertProfile(localProfile.copy(startedAtMillis = cloudStarted))

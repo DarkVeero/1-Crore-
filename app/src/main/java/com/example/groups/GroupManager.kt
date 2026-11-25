@@ -863,7 +863,7 @@ object GroupRepository {
                         todayDateKey = todayDateKey,
                         lifetimeTotalCount = (member.lifetimeTotalCount + delta).coerceAtLeast(0L),
                         weeklyCount = (baseWeekly + delta).coerceAtLeast(0L),
-                    updatedAtMillis = maxOf(group.updatedAtMillis + 1L, nowMillis)
+                    updatedAtMillis = maxOf(group.updatedAtMillis + 1L, nowMillis),
                         weeklyDateKey = currentWeekKey,
                     )
                 } else {
