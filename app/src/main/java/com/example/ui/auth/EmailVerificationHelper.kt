@@ -93,6 +93,23 @@ object EmailVerificationAutoSender {
     private val profileReadySignals = ConcurrentHashMap<String, CompletableDeferred<Unit>>()
     private val autoSentUids = ConcurrentHashMap.newKeySet<String>()
 
+    private const val AUTO_SENT_PREFS_NAME = "one_crore_email_verification_prefs"
+    private const val KEY_AUTO_SENT_UIDS = "auto_sent_uids"
+
+    private fun hasAutoSentPersisted(context: Context, uid: String): Boolean {
+        val prefs = context.applicationContext
+            .getSharedPreferences(AUTO_SENT_PREFS_NAME, Context.MODE_PRIVATE)
+        return (prefs.getStringSet(KEY_AUTO_SENT_UIDS, emptySet()) ?: emptySet()).contains(uid)
+    }
+
+    private fun persistAutoSentUid(context: Context, uid: String) {
+        val prefs = context.applicationContext
+            .getSharedPreferences(AUTO_SENT_PREFS_NAME, Context.MODE_PRIVATE)
+        val sent = (prefs.getStringSet(KEY_AUTO_SENT_UIDS, emptySet()) ?: emptySet()).toMutableSet()
+        if (!sent.add(uid)) return
+        prefs.edit().putStringSet(KEY_AUTO_SENT_UIDS, sent).apply()
+    }
+
     fun onSignupStarted(uid: String) {
         if (uid.isBlank()) return
         autoSentUids.remove(uid)
@@ -120,7 +137,7 @@ object EmailVerificationAutoSender {
         val initialUser = Firebase.auth.currentUser
             ?: return@withLock Result.failure(IllegalStateException("User not signed in"))
         val uid = initialUser.uid
-        if (initialUser.isEmailVerified || autoSentUids.contains(uid)) {
+        if (initialUser.isEmailVerified || autoSentUids.contains(uid) || hasAutoSentPersisted(context, uid)) {
             return@withLock Result.success(false)
         }
 
@@ -135,6 +152,7 @@ object EmailVerificationAutoSender {
             ?: return@withLock Result.failure(IllegalStateException("User not signed in"))
         if (readyUser.isEmailVerified) {
             autoSentUids.add(uid)
+        persistAutoSentUid(context, uid)
             return@withLock Result.success(false)
         }
 
@@ -167,6 +185,7 @@ object EmailVerificationAutoSender {
 
         return@withLock sendResult.map {
             autoSentUids.add(uid)
+        persistAutoSentUid(context, uid)
             true
         }
     }

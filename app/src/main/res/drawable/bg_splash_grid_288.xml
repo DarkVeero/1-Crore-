@@ -11,16 +11,7 @@
         android:fillColor="#FFFFFFFF"
         android:pathData="M0,0h288v288h-288z" />
 
-    <!-- Subtle 32dp-spaced faint grid hairlines matching FaintGridBackground (#F4F4F4) -->
-    <path
-        android:fillColor="#FFF4F4F4"
-        android:pathData="M16,0h1v288h-1zM48,0h1v288h-1zM80,0h1v288h-1zM112,0h1v288h-1zM144,0h1v288h-1zM176,0h1v288h-1zM208,0h1v288h-1zM240,0h1v288h-1zM272,0h1v288h-1z" />
-    <path
-        android:fillColor="#FFF4F4F4"
-        android:pathData="M0,16h288v1h-288zM0,48h288v1h-288zM0,80h288v1h-288zM0,112h288v1h-288zM0,144h288v1h-288zM0,176h288v1h-288zM0,208h288v1h-288zM0,240h288v1h-288zM0,272h288v1h-288z" />
 
-    <!-- Subtle soft grid squares matching FaintGridBackground -->
-    <path
-        android:fillColor="#FFFAFAFA"
-        android:pathData="M17,113h30v30h-30zM209,81h30v30h-30zM49,209h30v30h-30z" />
+
+
 </vector>

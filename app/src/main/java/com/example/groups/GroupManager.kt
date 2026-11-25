@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.LocalDate
@@ -82,6 +84,7 @@ object GroupCelebrationStore {
 }
 
 object GroupRepository {
+    private val groupWriteMutex = Mutex()
     private const val LOG_TAG = "Groups"
     private const val PREFS_NAME = "one_crore_groups_store_prefs"
     private const val KEY_GROUPS_JSON = "groups_registry_json"
@@ -90,6 +93,8 @@ object GroupRepository {
     private const val KEY_PENDING_JOIN_SYNC_IDS = "pending_join_sync_ids"
     private const val KEY_PENDING_LEAVE_SYNC_IDS = "pending_leave_sync_ids"
     private const val KEY_PENDING_DELETE_SYNC_IDS = "pending_delete_sync_ids"
+    private const val KEY_PENDING_RENAME_SYNC_IDS = "pending_rename_sync_ids"
+    private const val KEY_PENDING_RENAME_NAME_PREFIX = "pending_rename_name_"
     private const val KEY_DIRTY_GROUP_SYNC_IDS = "dirty_group_sync_ids"
     private const val KEY_GROUP_FLOATING_UNSYNCED_TAPS = "group_floating_unsynced_taps"
     private const val GROUP_FLOATING_BATCH_SYNC_THRESHOLD = 100L
@@ -133,6 +138,7 @@ object GroupRepository {
         .remove(KEY_PENDING_JOIN_SYNC_IDS)
         .remove(KEY_PENDING_LEAVE_SYNC_IDS)
         .remove(KEY_PENDING_DELETE_SYNC_IDS)
+            .remove(KEY_PENDING_RENAME_SYNC_IDS)
         .remove(KEY_DIRTY_GROUP_SYNC_IDS)
         .remove(KEY_GROUP_FLOATING_UNSYNCED_TAPS)
         .apply()
@@ -192,6 +198,30 @@ object GroupRepository {
         if (changed) {
             writeStringSet(context, KEY_PENDING_DELETE_SYNC_IDS, pendingSet)
         }
+    }
+
+    private fun markPendingRenameSync(context: Context, groupId: String, newName: String?, pending: Boolean) {
+        if (groupId.isBlank()) return
+        val pendingSet = readStringSet(context, KEY_PENDING_RENAME_SYNC_IDS)
+        val changed = if (pending) pendingSet.add(groupId) else pendingSet.remove(groupId)
+        if (changed) {
+            writeStringSet(context, KEY_PENDING_RENAME_SYNC_IDS, pendingSet)
+        }
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (pending) {
+            if (!newName.isNullOrBlank()) {
+                prefs.edit().putString(KEY_PENDING_RENAME_NAME_PREFIX + groupId, newName).apply()
+            }
+        } else {
+            prefs.edit().remove(KEY_PENDING_RENAME_NAME_PREFIX + groupId).apply()
+        }
+    }
+
+    private fun readPendingRenameName(context: Context, groupId: String): String? {
+        if (groupId.isBlank()) return null
+        return context.applicationContext
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_PENDING_RENAME_NAME_PREFIX + groupId, null)
     }
 
     fun markGroupDirtyForSync(context: Context, groupId: String) {
@@ -552,7 +582,8 @@ object GroupRepository {
             writeAllGroups(context, latestAll)
             return Result.success(remoteUpdated)
         }
-        return Result.success(renamedLocal)
+        markPendingRenameSync(context, groupId, cleanName, pending = true)
+    return Result.success(renamedLocal)
     }
 
     suspend fun deleteGroup(
@@ -686,6 +717,30 @@ object GroupRepository {
         nowMillis: Long = System.currentTimeMillis(),
         pushToCloud: Boolean = false
     ): Result<GroupItem> {
+        return groupWriteMutex.withLock {
+            adjustMainGroupCountLocked(
+                context = context,
+                userId = userId,
+                displayName = displayName,
+                groupId = groupId,
+                delta = delta,
+                todayDateKey = todayDateKey,
+                nowMillis = nowMillis,
+                pushToCloud = pushToCloud
+            )
+        }
+    }
+
+    suspend fun adjustMainGroupCountLocked(
+        context: Context,
+        userId: String,
+        displayName: String,
+        groupId: String,
+        delta: Long,
+        todayDateKey: String = LocalDate.now().toString(),
+        nowMillis: Long = System.currentTimeMillis(),
+        pushToCloud: Boolean = false
+    ): Result<GroupItem> {
         if (delta == 0L) {
             return Result.failure(IllegalArgumentException("Enter an amount greater than 0."))
         }
@@ -744,6 +799,30 @@ object GroupRepository {
      * Defaults to local-only update ([pushToCloud] = false) so rapid +1 taps stay batched.
      */
     suspend fun incrementCustomZikrGroup(
+        context: Context,
+        userId: String,
+        displayName: String,
+        groupId: String,
+        delta: Long,
+        todayDateKey: String = LocalDate.now().toString(),
+        nowMillis: Long = System.currentTimeMillis(),
+        pushToCloud: Boolean = false
+    ): Result<GroupItem> {
+        return groupWriteMutex.withLock {
+            incrementCustomZikrGroupLocked(
+                context = context,
+                userId = userId,
+                displayName = displayName,
+                groupId = groupId,
+                delta = delta,
+                todayDateKey = todayDateKey,
+                nowMillis = nowMillis,
+                pushToCloud = pushToCloud
+            )
+        }
+    }
+
+    suspend fun incrementCustomZikrGroupLocked(
         context: Context,
         userId: String,
         displayName: String,
@@ -888,6 +967,30 @@ object GroupRepository {
         }
     }
 
+    // Retries a pending group join; true means the pending flag can be cleared
+    // (Success, or GroupNotFound after removing the local group); false keeps the
+    // flag so a transient failure is retried on the next refresh.
+    private suspend fun retryPendingJoin(
+        context: Context,
+        groupId: String,
+        member: GroupMemberProgress
+    ): Boolean {
+        val outcome = joinMemberInFirestoreTransaction(
+            context = context,
+            groupId = groupId,
+            member = member,
+            nowMillis = System.currentTimeMillis()
+        )
+        return when (outcome) {
+            is CloudJoinOutcome.Success -> true
+            CloudJoinOutcome.GroupNotFound -> {
+                removeGroupLocally(context, groupId)
+                true
+            }
+            else -> false
+        }
+    }
+
     suspend fun refreshGroupsFromServer(context: Context, userId: String) {
         if (userId.isBlank()) return
         val db = firestoreOrNull(context) ?: return
@@ -924,7 +1027,33 @@ object GroupRepository {
                 markPendingDeleteSync(context, pendingId, pending = false)
             }
         }
-        // Retry any locally joined groups whose cloud member add hasn't succeeded yet.
+        // Retry any locally renamed groups whose cloud rename hasn't succeeded yet.
+    val pendingRenames = readStringSet(context, KEY_PENDING_RENAME_SYNC_IDS).toList()
+    if (pendingRenames.isNotEmpty()) {
+        val allLocal = readAllGroups(context)
+        pendingRenames.forEach { pendingId ->
+            val pendingGroup = allLocal[pendingId]
+            val pendingName = readPendingRenameName(context, pendingId)?.takeIf { it.isNotBlank() }
+                ?: pendingGroup?.name
+            if (pendingGroup == null || pendingName.isNullOrBlank()) {
+                markPendingRenameSync(context, pendingId, null, pending = false)
+            } else {
+                val renamed = renameGroupInFirestoreTransactionBestEffort(
+                    context = context,
+                    groupId = pendingId,
+                    creatorUserId = pendingGroup.creatorUserId,
+                    newName = pendingName,
+                    fallbackGroup = pendingGroup,
+                    nowMillis = System.currentTimeMillis()
+                )
+                if (renamed != null) {
+                    markPendingRenameSync(context, pendingId, null, pending = false)
+                }
+            }
+        }
+    }
+
+    // Retry any locally joined groups whose cloud member add hasn't succeeded yet.
         val pendingJoinIds = readStringSet(context, KEY_PENDING_JOIN_SYNC_IDS).toList()
         if (pendingJoinIds.isNotEmpty()) {
             val allLocal = readAllGroups(context)
@@ -933,7 +1062,7 @@ object GroupRepository {
                 val pendingMember = pendingGroup?.members?.firstOrNull { it.userId == userId }
                 if (pendingMember == null) {
                     markPendingJoinSync(context, pendingId, pending = false)
-                } else if (joinMemberInFirestoreTransaction(context = context, groupId = pendingId, member = pendingMember, nowMillis = System.currentTimeMillis()) is CloudJoinOutcome.Success) {
+                } else if (retryPendingJoin(context, pendingId, pendingMember)) {
                     markPendingJoinSync(context, pendingId, pending = false)
                 }
             }

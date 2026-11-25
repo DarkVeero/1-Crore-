@@ -67,8 +67,8 @@ object AnnouncementOwnerConfig {
     private const val KEY_OWNER_UNLOCKED = "owner_tools_unlocked"
 
     val DEFAULT_OWNER_EMAILS = setOf(
-        "supportwin717@gmail.com",
-        "1croresupport@gmail.com"
+        "1croresupport@gmail.com",
+        "mrmudasir1269@gmail.com"
     )
 
     @Volatile

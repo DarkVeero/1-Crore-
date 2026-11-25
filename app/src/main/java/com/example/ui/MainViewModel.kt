@@ -2370,7 +2370,7 @@ class MainViewModel(
     }
 
     fun onIncrementCustomZikrGroup(groupId: String, delta: Long) {
-        if (delta <= 0L) return
+        if (delta == 0L) return
         viewModelScope.launch {
             val today = refreshCurrentDate()
             val todayKey = today.toString()

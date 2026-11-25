@@ -95,6 +95,9 @@ interface DailyCountDao {
     @Query("UPDATE daily_counts SET pendingSync = 0, isManualEdit = 0 WHERE userId = :userId AND dateKey = :dateKey")
     suspend fun markDaySynced(userId: String, dateKey: String)
 
+    @Query("UPDATE daily_counts SET pendingSync = 1 WHERE userId = :userId")
+    suspend fun markAllDaysPendingSync(userId: String)
+
     @Query("DELETE FROM daily_counts WHERE userId = :userId")
     suspend fun deleteAllForUser(userId: String)
 }
@@ -141,6 +144,9 @@ interface CustomCounterDao {
 
     @Query("DELETE FROM custom_counters WHERE id = :id")
     suspend fun hardDeleteCounter(id: String)
+
+    @Query("UPDATE custom_counters SET pendingSync = 1 WHERE userId = :userId")
+    suspend fun markAllCountersPendingSync(userId: String)
 
     @Query("DELETE FROM custom_counters WHERE userId = :userId")
     suspend fun deleteAllForUser(userId: String)

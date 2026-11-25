@@ -983,6 +983,12 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
             val countsRef = userDocRef.collection("daily_counts")
             val customRef = userDocRef.collection("custom_counters")
 
+        // Mark every local day and custom counter as pending sync first: if the
+        // cloud deletion below fails partway, the next sync re-pushes the
+        // surviving local rows instead of losing them.
+        dailyDao.markAllDaysPendingSync(uid)
+        customDao.markAllCountersPendingSync(uid)
+
             try {
                 val snapshot = countsRef.get().await()
                 for (doc in snapshot.documents) {
@@ -1595,7 +1601,7 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
             item = item,
             nowMillis = nowMillis
         )
-        runCatching {
+        val cloudWrite = runCatching {
             withTimeoutOrNull(4_000L) {
                 firestore.collection("announcements")
                     .document(item.id)
@@ -1608,6 +1614,9 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
                 "Scheduled announcement ${item.id} queued locally (cloud write deferred to Admin trigger: ${err.message})"
             )
         }
+                val writeError = cloudWrite.exceptionOrNull()
+        if (writeError != null) return Result.failure(writeError)
+        if (cloudWrite.getOrNull() == null) return Result.failure(java.util.concurrent.TimeoutException("Announcement cloud write timed out"))
         return Result.success(item)
     }
 
@@ -1850,13 +1859,13 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
             }
             val isToday = dateKey == todayDateKey
             return if (isToday) {
-                // Today -> device count wins when local today exists
-                val needsUpload = local.count != safeCloudCount
+                // Today -> same rule as past days: the larger count wins; cloud NEVER overwrites local with a smaller number
+                val resolved = maxOf(local.count, safeCloudCount)
                 local.copy(
-                    count = local.count,
-                    pendingSync = needsUpload,
+                    count = resolved,
+                    pendingSync = local.count > safeCloudCount,
                     isManualEdit = false,
-                    updatedAtMillis = if (needsUpload) maxOf(local.updatedAtMillis, cloudUpdatedAtMillis) else local.updatedAtMillis
+                    updatedAtMillis = if (safeCloudCount > local.count) maxOf(local.updatedAtMillis, cloudUpdatedAtMillis) else local.updatedAtMillis
                 )
             } else {
                 // Past days -> the larger count wins; cloud NEVER overwrites local with a smaller number
