@@ -319,7 +319,7 @@ class MainViewModel(
         todayStateFlow,
         pendingSummaryFlow,
         optimisticTapDeltaFlow
-    ) { profile, days, total, todayPair, pendingTriple, optimisticDelta ->
+    ) { profile: UserProfileEntity?, days: List<DailyCountEntity>, total: Long, todayPair: Pair<LocalDate, Long>, pendingTriple: Triple<Boolean, Int, Long>, optimisticDelta: Long ->
         CountMetrics(
             profile = profile,
             days = days,
