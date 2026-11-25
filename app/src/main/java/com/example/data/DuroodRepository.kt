@@ -1022,6 +1022,7 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
                 auth.currentUser?.delete()?.await()
             } catch (_: Exception) {
                 auth.signOut()
+            return Result.failure(IllegalStateException("Could not delete your account. Please sign in again and retry delete."))
             }
             Result.success(Unit)
         } catch (e: CancellationException) {

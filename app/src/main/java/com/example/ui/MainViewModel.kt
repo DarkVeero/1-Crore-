@@ -677,7 +677,7 @@ class MainViewModel(
             if (online) {
                 isSyncingFlow.value = true
                 val hadPendingSyncBefore = repository.getProfileOnce(currentUserId)?.pendingSync == true
-                val syncResult = repository.syncWithCloud()
+                val syncResult = try { repository.syncWithCloud() } finally { isSyncingFlow.value = false }
                 isSyncingFlow.value = false
 
                 val hasLocalAfterSync = repository.hasLocalExistingData(currentUserId)
@@ -2020,7 +2020,11 @@ class MainViewModel(
     fun dismissMilestoneBadgeCelebration() {
         val badge = pendingMilestoneBadgeFlow.value ?: return
         MilestoneBadgeManager.markBadgeCelebrated(appContext, currentUserId, badge.tier)
-        pendingMilestoneBadgeFlow.value = null
+        pendingMilestoneBadgeFlow.value = MilestoneBadgeManager.getPendingCelebrationBadge(
+            context = appContext,
+            userId = currentUserId,
+            mainDuroodTotalCount = uiState.value.totalCount
+        )
         badgeRefreshTickFlow.value = badgeRefreshTickFlow.value + 1
     }
 
@@ -2408,13 +2412,22 @@ class MainViewModel(
         viewModelScope.launch {
              
              
+                        if (!NetworkMonitor.isCurrentlyOnline(appContext)) {
+                statusMessageFlow.value = "Connect to the internet to delete your account"
+                return@launch
+            }
             ReminderScheduler.cancelAll(appContext)
+            val groupsSnapshot = GroupRepository.snapshotLocalGroups(appContext)
             val currentGroups = GroupRepository.getGroupsForUser(appContext, currentUserId)
             currentGroups.forEach { group ->
                 GroupRepository.leaveGroup(appContext, currentUserId, group.id)
             }
             val result = repository.deleteAllUserData(currentUserId)
-        if (result.isFailure) { statusMessageFlow.value = result.exceptionOrNull()?.localizedMessage ?: "Delete failed. Please try again."; return@launch }
+        if (result.isFailure) {
+                GroupRepository.restoreLocalGroupsSnapshot(appContext, groupsSnapshot)
+                statusMessageFlow.value = (result.exceptionOrNull()?.localizedMessage ?: "Delete failed. Please try again.") + " If a group leave already went through, re-join with the invite codes."
+                return@launch
+            }
         result.onSuccess({
                 // Guard above already returned on failure, so this always runs.
                 AuthFlowStore.clearUser(appContext, currentUserId)

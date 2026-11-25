@@ -676,6 +676,7 @@ fun SettingsScreen(
     if (showDeleteDialog) {
         DeleteAccountConfirmDialog(
             onDismiss = { showDeleteDialog = false },
+        isGoogleOnly = !hasPasswordLinked,
             onVerifyPassword = onVerifyPasswordForDelete ?: { enteredPassword ->
                 val user = Firebase.auth.currentUser
                 val email = user?.email
@@ -1275,7 +1276,8 @@ private fun ReminderTimePickerDialog(
 fun DeleteAccountConfirmDialog(
     onDismiss: () -> Unit,
     onConfirmDelete: () -> Unit,
-    onVerifyPassword: suspend (String) -> Result<Unit> = { Result.success(Unit) }
+    onVerifyPassword: suspend (String) -> Result<Unit> = { Result.success(Unit) },
+    isGoogleOnly: Boolean = false
 ) {
     val palette = AppThemeColors.palette
     val scope = rememberCoroutineScope()
@@ -1341,11 +1343,11 @@ fun DeleteAccountConfirmDialog(
                     text = if (isVerifying) "Verifying..." else "Delete",
                     enabled = !isVerifying,
                     onClick = {
-                        if (password.isBlank()) {
+                        if (!isGoogleOnly && password.isBlank()) {
                             passwordError = "Enter your password to confirm account deletion"
                             return@BlackPillButton
                         }
-                        if (password.length < 6) {
+                        if (!isGoogleOnly && password.length < 6) {
                             passwordError = "Password must be at least 6 characters"
                             return@BlackPillButton
                         }

@@ -284,6 +284,14 @@ object GroupRepository {
         resetFloatingTapBatchCounter(context)
     }
 
+    fun snapshotLocalGroups(context: Context): Map<String, GroupItem> {
+        return readAllGroups(context).toMap()
+    }
+
+    fun restoreLocalGroupsSnapshot(context: Context, snapshot: Map<String, GroupItem>) {
+        writeAllGroups(context, snapshot)
+    }
+
     private fun readAllGroups(context: Context): MutableMap<String, GroupItem> {
         val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val raw = prefs.getString(KEY_GROUPS_JSON, null).orEmpty()
@@ -1015,8 +1023,9 @@ object GroupRepository {
         val pendingLeaves = readStringSet(context, KEY_PENDING_LEAVE_SYNC_IDS).toList()
         if (pendingLeaves.isNotEmpty()) {
             pendingLeaves.forEach { pendingId ->
-                removeMemberInFirestoreTransactionBestEffort(context, pendingId, userId, System.currentTimeMillis())
+                if (removeMemberInFirestoreTransactionBestEffort(context, pendingId, userId, System.currentTimeMillis())) {
                 markPendingLeaveSync(context, pendingId, pending = false)
+            }
             }
         }
         // Retry any locally deleted groups whose cloud deletion hasn't succeeded yet.

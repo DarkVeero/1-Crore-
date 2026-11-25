@@ -318,6 +318,45 @@ fun attemptAutoSignIn(
     }
 }
 
+// Re-authenticates the currently signed-in Firebase user with a fresh Google
+// ID-token credential. Used when deleting the account of a Google-only user,
+// who has no password to re-authenticate with. Returns failure when there is
+// no signed-in user, no Google credential is available, or re-authentication fails.
+internal suspend fun reauthenticateWithGoogle(
+    context: Context,
+    credentialManager: CredentialManager
+): Result<Unit> {
+    val user = Firebase.auth.currentUser
+        ?: return Result.failure(IllegalStateException("Account session not found. Please sign in again."))
+    val clientId = try {
+        context.getString(R.string.default_web_client_id)
+    } catch (_: Exception) {
+        return Result.failure(IllegalStateException(GOOGLE_CONFIG_ERROR_MESSAGE))
+    }
+    return try {
+        val request = buildGoogleIdRequest(
+            serverClientId = clientId,
+            filterByAuthorizedAccounts = true,
+            autoSelectEnabled = true
+        )
+        val hostContext = findHostActivity(context) ?: context
+        val result = credentialManager.getCredential(hostContext, request)
+        val credential = result.credential
+        if (credential is CustomCredential && credential.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+            val googleIdToken = GoogleIdTokenCredential.createFrom(credential.data).idToken
+            val authCredential = GoogleAuthProvider.getCredential(googleIdToken, null)
+            user.reauthenticate(authCredential).await()
+            Result.success(Unit)
+        } else {
+            Result.failure(IllegalStateException(GOOGLE_NO_CREDENTIAL_MESSAGE))
+        }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+}
+
 fun onGoogleSignInClicked(
     context: Context,
     credentialManager: CredentialManager,

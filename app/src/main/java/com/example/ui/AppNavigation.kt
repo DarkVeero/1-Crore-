@@ -80,6 +80,7 @@ import com.example.ui.auth.AuthFlowStore
 import com.example.ui.auth.AuthScreen
 import com.example.ui.auth.LinkPasswordScreen
 import com.example.ui.auth.VerifyEmailScreen
+import com.example.ui.auth.reauthenticateWithGoogle
 import com.example.ui.auth.signOutUser
 import com.example.ui.components.rememberReduceMotion
 import com.example.ui.screens.AnimatedLogoLoadingScreen
@@ -743,7 +744,8 @@ internal fun MainTabScaffold(
                             onRestoreBackupJson = viewModel::restoreBackupJson,
                             onDeleteAccount = viewModel::deleteAccount,
                             userEmail = userEmail,
-                            onScheduleAnnouncement = viewModel::scheduleOrPublishAnnouncement
+                            onScheduleAnnouncement = viewModel::scheduleOrPublishAnnouncement,
+            onVerifyPasswordForDelete = if (hasPasswordLinked) null else { _ -> reauthenticateWithGoogle(context, credentialManager) },
                         )
                     }
                     composable(ROUTE_MESSAGES_HISTORY) {

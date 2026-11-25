@@ -378,7 +378,7 @@ object AppUpdateManager {
         appendLine(UpdateConfig.SHARE_APP_INVITE_CTA)
         appendLine()
         if (!downloadUrl.isNullOrBlank()) {
-            appendLine(UpdateConfig.SHARE_APP_DOWNLOAD_CTA)
+            if (!downloadUrl.isNullOrBlank()) appendLine(UpdateConfig.SHARE_APP_DOWNLOAD_CTA)
         appendLine()
             appendLine(UpdateConfig.SHARE_APP_DOWNLOAD_POINTERS)
         }
@@ -414,7 +414,7 @@ object AppUpdateManager {
             appendLine(UpdateConfig.SHARE_APP_HEADER)
             appendLine("Today: $todayFormatted · Total: $totalFormatted / 10,000,000 ($percentFormatted)")
             appendLine()
-            appendLine(UpdateConfig.SHARE_APP_DOWNLOAD_CTA)
+            if (!downloadUrl.isNullOrBlank()) appendLine(UpdateConfig.SHARE_APP_DOWNLOAD_CTA)
             if (resolvedDownloadUrl.isNotBlank()) {
                 appendLine(resolvedDownloadUrl)
             }
@@ -573,7 +573,7 @@ object AppUpdateManager {
 
         // Footer with App Download Link
         canvas.drawLine(96f, 846f, width - 96f, 846f, hairlinePaint)
-        canvas.drawText("DOWNLOAD 1 CRORE APP", 96f, 902f, sectionLabelPaint)
+        if (spec.downloadUrl.isNotBlank()) canvas.drawText("DOWNLOAD 1 CRORE APP", 96f, 902f, sectionLabelPaint)
 
         val linkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = pureBlack
