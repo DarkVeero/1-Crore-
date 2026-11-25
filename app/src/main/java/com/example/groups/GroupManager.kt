@@ -20,6 +20,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.LocalDate
+import java.time.temporal.WeekFields
+import java.util.Locale
 import java.util.UUID
 
 object GroupCelebrationStore {
@@ -85,6 +87,9 @@ object GroupRepository {
     private const val KEY_GROUPS_JSON = "groups_registry_json"
     private const val KEY_DELETED_GROUP_IDS = "deleted_group_ids"
     private const val KEY_PENDING_CREATE_SYNC_IDS = "pending_create_sync_ids"
+    private const val KEY_PENDING_JOIN_SYNC_IDS = "pending_join_sync_ids"
+    private const val KEY_PENDING_LEAVE_SYNC_IDS = "pending_leave_sync_ids"
+    private const val KEY_PENDING_DELETE_SYNC_IDS = "pending_delete_sync_ids"
     private const val KEY_DIRTY_GROUP_SYNC_IDS = "dirty_group_sync_ids"
     private const val KEY_GROUP_FLOATING_UNSYNCED_TAPS = "group_floating_unsynced_taps"
     private const val GROUP_FLOATING_BATCH_SYNC_THRESHOLD = 100L
@@ -115,7 +120,7 @@ object GroupRepository {
             .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
             .putStringSet(key, values)
-            .commit()
+            .apply()
     }
 
     private fun markGroupDeletedLocally(context: Context, groupId: String) {
@@ -130,12 +135,47 @@ object GroupRepository {
         }
     }
 
+    private fun clearGroupDeletedLocally(context: Context, groupId: String) {
+        if (groupId.isBlank()) return
+        val deleted = readStringSet(context, KEY_DELETED_GROUP_IDS)
+        if (deleted.remove(groupId)) {
+            writeStringSet(context, KEY_DELETED_GROUP_IDS, deleted)
+        }
+    }
+
     private fun markPendingCreateSync(context: Context, groupId: String, pending: Boolean) {
         if (groupId.isBlank()) return
         val pendingSet = readStringSet(context, KEY_PENDING_CREATE_SYNC_IDS)
         val changed = if (pending) pendingSet.add(groupId) else pendingSet.remove(groupId)
         if (changed) {
             writeStringSet(context, KEY_PENDING_CREATE_SYNC_IDS, pendingSet)
+        }
+    }
+
+    private fun markPendingJoinSync(context: Context, groupId: String, pending: Boolean) {
+        if (groupId.isBlank()) return
+        val pendingSet = readStringSet(context, KEY_PENDING_JOIN_SYNC_IDS)
+        val changed = if (pending) pendingSet.add(groupId) else pendingSet.remove(groupId)
+        if (changed) {
+            writeStringSet(context, KEY_PENDING_JOIN_SYNC_IDS, pendingSet)
+        }
+    }
+
+    private fun markPendingLeaveSync(context: Context, groupId: String, pending: Boolean) {
+        if (groupId.isBlank()) return
+        val pendingSet = readStringSet(context, KEY_PENDING_LEAVE_SYNC_IDS)
+        val changed = if (pending) pendingSet.add(groupId) else pendingSet.remove(groupId)
+        if (changed) {
+            writeStringSet(context, KEY_PENDING_LEAVE_SYNC_IDS, pendingSet)
+        }
+    }
+
+    private fun markPendingDeleteSync(context: Context, groupId: String, pending: Boolean) {
+        if (groupId.isBlank()) return
+        val pendingSet = readStringSet(context, KEY_PENDING_DELETE_SYNC_IDS)
+        val changed = if (pending) pendingSet.add(groupId) else pendingSet.remove(groupId)
+        if (changed) {
+            writeStringSet(context, KEY_PENDING_DELETE_SYNC_IDS, pendingSet)
         }
     }
 
@@ -190,8 +230,9 @@ object GroupRepository {
             } else {
                 val member = group.members.firstOrNull { it.userId == userId }
                 if (member != null) {
-                    clearGroupDirtyForSync(context, groupId)
-                    upsertMemberStatsTransactionBestEffort(context, groupId, member)
+                    if (upsertMemberStatsTransactionBestEffort(context, groupId, member)) {
+                        clearGroupDirtyForSync(context, groupId)
+                    }
                 }
             }
         }
@@ -228,7 +269,7 @@ object GroupRepository {
             .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
             .putString(KEY_GROUPS_JSON, array.toString())
-            .commit()
+            .apply()
         _groupUpdates.tryEmit(Unit)
     }
 
@@ -419,7 +460,9 @@ object GroupRepository {
                 is CloudJoinOutcome.Success -> {
                     allGroups[cloudResult.group.id] = cloudResult.group
                     writeAllGroups(context, allGroups)
-                    return Result.success(cloudResult.group)
+                    clearGroupDeletedLocally(context, cloudResult.group.id)
+                markPendingJoinSync(context, cloudResult.group.id, pending = false)
+                return Result.success(cloudResult.group)
                 }
                 CloudJoinOutcome.GroupNotFound -> {
                     allGroups.remove(targetGroup.id)
@@ -450,6 +493,7 @@ object GroupRepository {
         )
         allGroups[updatedGroup.id] = updatedGroup
         writeAllGroups(context, allGroups)
+        markPendingJoinSync(context, updatedGroup.id, pending = true)
         return Result.success(updatedGroup)
     }
 
@@ -503,10 +547,12 @@ object GroupRepository {
     ): Result<Unit> {
         val allGroups = readAllGroups(context)
         val existing = allGroups[groupId]
-        if (existing != null && existing.creatorUserId.isNotBlank() && existing.creatorUserId != userId) {
+            ?: return Result.failure(IllegalStateException("Group not found"))
+        if (existing.creatorUserId.isBlank() || existing.creatorUserId != userId) {
             return Result.failure(IllegalStateException("Only the group creator can delete this group."))
         }
         markGroupDeletedLocally(context, groupId)
+        markPendingDeleteSync(context, groupId, pending = true)
         clearGroupDirtyForSync(context, groupId)
         allGroups.remove(groupId)
         writeAllGroups(context, allGroups)
@@ -524,6 +570,24 @@ object GroupRepository {
         val allGroups = readAllGroups(context)
         val group = allGroups[groupId] ?: return Result.success(Unit)
         val remainingMembers = group.members.filterNot { it.userId == userId }
+        if (group.creatorUserId == userId) {
+            if (remainingMembers.isEmpty()) {
+                return deleteGroup(context, userId, groupId).map {}
+            }
+            val updatedGroup = group.copy(
+                members = remainingMembers,
+                creatorUserId = remainingMembers.first().userId,
+                serverTotalCount = remainingMembers.sumOf { it.lifetimeTotalCount.coerceAtLeast(0L) },
+                updatedAtMillis = maxOf(nowMillis, group.updatedAtMillis + 1L)
+            )
+            allGroups[groupId] = updatedGroup
+            clearGroupDirtyForSync(context, groupId)
+            writeAllGroups(context, allGroups)
+            markPendingLeaveSync(context, groupId, pending = true)
+            com.example.floating.FloatingCounterManager.onGroupRemovedOrLeft(context, groupId)
+            removeMemberInFirestoreTransactionBestEffort(context, groupId, userId, updatedGroup.updatedAtMillis)
+            return Result.success(Unit)
+        }
         val updatedGroup = group.copy(
             members = remainingMembers,
             serverTotalCount = remainingMembers.sumOf { it.lifetimeTotalCount.coerceAtLeast(0L) },
@@ -532,6 +596,7 @@ object GroupRepository {
         allGroups[groupId] = updatedGroup
         clearGroupDirtyForSync(context, groupId)
         writeAllGroups(context, allGroups)
+        markPendingLeaveSync(context, groupId, pending = true)
         com.example.floating.FloatingCounterManager.onGroupRemovedOrLeft(context, groupId)
         removeMemberInFirestoreTransactionBestEffort(context, groupId, userId, updatedGroup.updatedAtMillis)
         return Result.success(Unit)
@@ -584,6 +649,13 @@ object GroupRepository {
         upsertMemberStatsTransactionBestEffort(context, group.id, member)
     }
 
+    private fun currentWeekKey(today: LocalDate = LocalDate.now()): String {
+        val weekFields = WeekFields.ISO
+        val week = today.get(weekFields.weekOfWeekBasedYear())
+        val year = today.get(weekFields.weekBasedYear())
+        return String.format(Locale.US, "%04d-W%02d", year, week)
+    }
+
     /**
      * Adds or reduces a count strictly inside the specified MAIN_DUROOD group for [userId].
      * Positive [delta] adds to this group's today + weekly + lifetime counts; negative [delta]
@@ -613,7 +685,9 @@ object GroupRepository {
                 if (member.userId == userId) {
                     val existingToday = if (member.todayDateKey == todayDateKey) member.todayCount else 0L
                     val newToday = (existingToday + delta).coerceAtLeast(0L)
-                    val newWeekly = (member.weeklyCount + delta).coerceAtLeast(0L)
+                    val currentWeekKey = currentWeekKey()
+                    val baseWeekly = if (member.weeklyDateKey == currentWeekKey) member.weeklyCount else 0L
+                    val newWeekly = (baseWeekly + delta).coerceAtLeast(0L)
                     val newLifetime = (member.lifetimeTotalCount + delta).coerceAtLeast(0L)
                     member.copy(
                         displayName = cleanName,
@@ -621,6 +695,7 @@ object GroupRepository {
                         todayDateKey = todayDateKey,
                         lifetimeTotalCount = newLifetime,
                         weeklyCount = newWeekly,
+                        weeklyDateKey = currentWeekKey,
                         updatedAtMillis = resolvedNow
                     )
                 } else {
@@ -628,16 +703,7 @@ object GroupRepository {
                 }
             }
         } else {
-            val clampedDelta = delta.coerceAtLeast(0L)
-            group.members + GroupMemberProgress(
-                userId = userId,
-                displayName = cleanName,
-                todayCount = clampedDelta,
-                todayDateKey = todayDateKey,
-                lifetimeTotalCount = clampedDelta,
-                weeklyCount = clampedDelta,
-                updatedAtMillis = resolvedNow
-            )
+            return Result.failure(IllegalStateException("You are not a member of this group."))
         }
 
         val newSum = newMembers.sumOf { it.lifetimeTotalCount.coerceAtLeast(0L) }
@@ -672,7 +738,7 @@ object GroupRepository {
         nowMillis: Long = System.currentTimeMillis(),
         pushToCloud: Boolean = false
     ): Result<GroupItem> {
-        if (delta <= 0L) {
+        if (delta == 0L) {
             return Result.failure(IllegalArgumentException("Enter an amount greater than 0."))
         }
         val allGroups = readAllGroups(context)
@@ -687,12 +753,15 @@ object GroupRepository {
             group.members.map { member ->
                 if (member.userId == userId) {
                     val existingToday = if (member.todayDateKey == todayDateKey) member.todayCount else 0L
+                    val currentWeekKey = currentWeekKey()
+                    val baseWeekly = if (member.weeklyDateKey == currentWeekKey) member.weeklyCount else 0L
                     member.copy(
                         displayName = cleanName,
-                        todayCount = existingToday + delta,
+                        todayCount = (existingToday + delta).coerceAtLeast(0L),
                         todayDateKey = todayDateKey,
-                        lifetimeTotalCount = member.lifetimeTotalCount + delta,
-                        weeklyCount = member.weeklyCount + delta,
+                        lifetimeTotalCount = (member.lifetimeTotalCount + delta).coerceAtLeast(0L),
+                        weeklyCount = (baseWeekly + delta).coerceAtLeast(0L),
+                        weeklyDateKey = currentWeekKey,
                         updatedAtMillis = nowMillis
                     )
                 } else {
@@ -700,13 +769,15 @@ object GroupRepository {
                 }
             }
         } else {
+            val clampedDelta = delta.coerceAtLeast(0L)
             group.members + GroupMemberProgress(
                 userId = userId,
                 displayName = cleanName,
-                todayCount = delta,
+                todayCount = clampedDelta,
                 todayDateKey = todayDateKey,
-                lifetimeTotalCount = delta,
-                weeklyCount = delta,
+                lifetimeTotalCount = clampedDelta,
+                weeklyCount = clampedDelta,
+                weeklyDateKey = currentWeekKey(),
                 updatedAtMillis = nowMillis
             )
         }
@@ -822,6 +893,22 @@ object GroupRepository {
             }
         }
 
+        // Retry any locally left groups whose cloud removal hasn't succeeded yet.
+        val pendingLeaves = readStringSet(context, KEY_PENDING_LEAVE_SYNC_IDS).toList()
+        if (pendingLeaves.isNotEmpty()) {
+            pendingLeaves.forEach { pendingId ->
+                removeMemberInFirestoreTransactionBestEffort(context, pendingId, userId, System.currentTimeMillis())
+                markPendingLeaveSync(context, pendingId, pending = false)
+            }
+        }
+        // Retry any locally deleted groups whose cloud deletion hasn't succeeded yet.
+        val pendingDeletes = readStringSet(context, KEY_PENDING_DELETE_SYNC_IDS).toList()
+        if (pendingDeletes.isNotEmpty()) {
+            pendingDeletes.forEach { pendingId ->
+                deleteGroupInFirestoreBestEffort(context, pendingId)
+                markPendingDeleteSync(context, pendingId, pending = false)
+            }
+        }
         val snap = runCatching {
             withTimeoutOrNull(FIRESTORE_OP_TIMEOUT_MS) {
                 db.collection("groups")
@@ -834,6 +921,7 @@ object GroupRepository {
         val all = readAllGroups(context)
         val deletedIds = readStringSet(context, KEY_DELETED_GROUP_IDS)
         val remainingPendingCreates = readStringSet(context, KEY_PENDING_CREATE_SYNC_IDS)
+        val pendingJoins = readStringSet(context, KEY_PENDING_JOIN_SYNC_IDS)
         val remoteIds = hashSetOf<String>()
         var changed = false
 
@@ -854,7 +942,8 @@ object GroupRepository {
                 .filter { g ->
                     g.members.any { it.userId == userId } &&
                         g.id !in remoteIds &&
-                        g.id !in remainingPendingCreates
+                        g.id !in remainingPendingCreates &&
+                    g.id !in pendingJoins
                 }
                 .map { it.id }
             staleIds.forEach { staleId ->
@@ -1092,10 +1181,10 @@ object GroupRepository {
         context: Context,
         groupId: String,
         member: GroupMemberProgress
-    ) {
-        val db = firestoreOrNull(context) ?: return
-        val authUser = runCatching { Firebase.auth.currentUser }.getOrNull() ?: return
-        if (authUser.uid.isBlank()) return
+    ): Boolean {
+        val db = firestoreOrNull(context) ?: return false
+        val authUser = runCatching { Firebase.auth.currentUser }.getOrNull() ?: return false
+        if (authUser.uid.isBlank()) return false
 
         cloudGroupWritesForTest.incrementAndGet()
         val docRef = db.collection("groups").document(groupId)
@@ -1124,6 +1213,9 @@ object GroupRepository {
 
         if (mergedGroup != null) {
             upsertRemoteGroupLocally(context, mergedGroup)
+            return true
+        } else {
+            return false
         }
     }
 
@@ -1224,6 +1316,7 @@ object GroupRepository {
                     "todayDateKey" to member.todayDateKey,
                     "lifetimeTotalCount" to member.lifetimeTotalCount,
                     "weeklyCount" to member.weeklyCount,
+                    "weeklyDateKey" to member.weeklyDateKey,
                     "updatedAtMillis" to member.updatedAtMillis
                 )
             }
@@ -1254,6 +1347,7 @@ object GroupRepository {
                 todayDateKey = (m["todayDateKey"] as? String).orEmpty(),
                 lifetimeTotalCount = (m["lifetimeTotalCount"] as? Number)?.toLong() ?: 0L,
                 weeklyCount = (m["weeklyCount"] as? Number)?.toLong() ?: 0L,
+                weeklyDateKey = (m["weeklyDateKey"] as? String) ?: "",
                 updatedAtMillis = (m["updatedAtMillis"] as? Number)?.toLong() ?: 0L
             )
         }
@@ -1283,6 +1377,7 @@ object GroupRepository {
                     put("todayDateKey", m.todayDateKey)
                     put("lifetimeTotalCount", m.lifetimeTotalCount)
                     put("weeklyCount", m.weeklyCount)
+                    put("weeklyDateKey", m.weeklyDateKey)
                     put("updatedAtMillis", m.updatedAtMillis)
                 }
             )
@@ -1321,6 +1416,7 @@ object GroupRepository {
                         todayDateKey = m.optString("todayDateKey", ""),
                         lifetimeTotalCount = m.optLong("lifetimeTotalCount", 0L),
                         weeklyCount = m.optLong("weeklyCount", 0L),
+                        weeklyDateKey = m.optString("weeklyDateKey", ""),
                         updatedAtMillis = m.optLong("updatedAtMillis", 0L)
                     )
                 )

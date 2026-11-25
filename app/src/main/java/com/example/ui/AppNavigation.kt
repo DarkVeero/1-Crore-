@@ -75,6 +75,7 @@ import androidx.navigation.navArgument
 import com.example.announcements.AnnouncementLaunchRequest
 import com.example.data.DuroodRepository
 import com.example.floating.FloatingCounterManager
+import com.example.notifications.ReminderScheduler
 import com.example.ui.auth.AuthFlowStore
 import com.example.ui.auth.AuthScreen
 import com.example.ui.auth.LinkPasswordScreen
@@ -236,6 +237,7 @@ fun AppNavigation(
                     onSignOut = {
                         FloatingCounterManager.stopGroupFloatingButtonIfActive(context)
                         WidgetAndFloatingBridge.setActiveUserId(context, null)
+                        ReminderScheduler.cancelAll(context)
                         signOutUser(
                             credentialManager = credentialManager,
                             scope = scope,
@@ -278,6 +280,7 @@ fun AppNavigation(
                     onSignOut = {
                         FloatingCounterManager.stopGroupFloatingButtonIfActive(context)
                         WidgetAndFloatingBridge.setActiveUserId(context, null)
+                        ReminderScheduler.cancelAll(context)
                         signOutUser(
                             credentialManager = credentialManager,
                             scope = scope,
@@ -712,8 +715,10 @@ internal fun MainTabScaffold(
                         )
                     }
                     composable(AppTab.HISTORY.route) {
+                        val historyDays by viewModel.historyAllDaysFlow.collectAsStateWithLifecycle()
                         HistoryScreen(
                             uiState = uiState,
+                            historyDays = historyDays,
                             onEditDayCount = viewModel::onEditDayCount,
                             onOpenMessagesHistory = {
                                 viewModel.refreshAnnouncementHistory()

@@ -34,6 +34,7 @@ import com.example.widget.WidgetAndFloatingBridge
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.text.NumberFormat
@@ -374,6 +375,22 @@ object ReminderScheduler {
     }
 
     fun cancelAll(context: Context, alarmManager: AlarmManager? = null) {
+        // Wipe the saved schedule config and the reminder quota (last-sent) state so
+        // reminders cannot resurrect from stale persisted state after logout / delete account.
+        try {
+            context.applicationContext
+                .getSharedPreferences(SCHEDULE_PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .clear()
+                .apply()
+        } catch (_: Exception) {
+        }
+        try {
+            runBlocking {
+                context.applicationContext.reminderPrefs.edit { it.clear() }
+            }
+        } catch (_: Exception) {
+        }
         val am = alarmManager ?: (context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager)
         if (am != null) {
             cancelAlarmsOnly(context, am)
@@ -395,9 +412,8 @@ object ReminderScheduler {
         val db = dbOverride ?: AppDatabase.getInstance(appContext)
         val uid = resolveReminderUserId(appContext, db)
         val profile = uid?.let { db.userProfileDao().getProfile(it) }
-        val savedCfg = getSavedScheduleConfig(appContext)
 
-        if (profile != null && profile.setupCompleted) {
+        if (Firebase.auth.currentUser != null && profile != null && profile.setupCompleted) {
             scheduleReminders(
                 context = appContext,
                 enabled = profile.remindersEnabled,
@@ -406,16 +422,6 @@ object ReminderScheduler {
                 r2Hour = profile.reminder2Hour,
                 r2Minute = profile.reminder2Minute,
                 userId = profile.userId
-            )
-        } else if (savedCfg != null) {
-            scheduleReminders(
-                context = appContext,
-                enabled = savedCfg.enabled,
-                r1Hour = savedCfg.r1Hour,
-                r1Minute = savedCfg.r1Minute,
-                r2Hour = savedCfg.r2Hour,
-                r2Minute = savedCfg.r2Minute,
-                userId = savedCfg.userId
             )
         }
     }

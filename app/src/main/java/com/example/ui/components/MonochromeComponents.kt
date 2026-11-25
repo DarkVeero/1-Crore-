@@ -4,6 +4,7 @@ import android.app.ActivityManager
 import android.content.Context
 import android.provider.Settings
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.EaseInOutSine
 import androidx.compose.animation.core.EaseOutCubic
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -13,6 +14,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -157,16 +160,14 @@ fun FaintGridBackground(
     val oscillationFractionState = if (staticMode) {
         null
     } else {
-        val infiniteTransition = rememberInfiniteTransition(label = "faint_grid_oscillation")
-        infiniteTransition.animateFloat(
-            initialValue = -1f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = cycleHalfMs, easing = EaseInOutSine),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "faint_grid_y_fraction"
-        )
+        val gridAnimatable = remember { Animatable(-1f) }
+        LaunchedEffect(Unit) {
+            gridAnimatable.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 4_000, easing = EaseInOutSine)
+            )
+        }
+        gridAnimatable.asState()
     }
 
     Box(
@@ -448,6 +449,15 @@ fun RollingNumberText(
     color: Color = AppThemeColors.palette.onCanvas
 ) {
     val formatted = formatNumber(value)
+    // Rapid taps (< 250ms apart) skip the per-digit slide+fade and update instantly.
+    // lastChangeMillis is a plain holder (not State); updating it does not recompose.
+    val lastChangeHolder = remember { object { var millis: Long = 0L } }
+    val skipDigitAnimation = remember(value) {
+        val now = System.currentTimeMillis()
+        val skip = lastChangeHolder.millis != 0L && now - lastChangeHolder.millis < 250L
+        lastChangeHolder.millis = now
+        skip
+    }
     if (reduceMotion) {
         Text(
             text = formatted,
@@ -469,6 +479,7 @@ fun RollingNumberText(
                     AnimatedContent(
                         targetState = ch,
                         transitionSpec = {
+                            if (skipDigitAnimation) EnterTransition.None togetherWith ExitTransition.None else
                             (slideInVertically(
                                 animationSpec = tween(180, easing = EaseOutCubic)
                             ) { height -> height / 2 } + fadeIn(tween(150, easing = EaseOutCubic)))

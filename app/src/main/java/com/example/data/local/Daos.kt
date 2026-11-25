@@ -33,6 +33,9 @@ interface DailyCountDao {
     @Query("SELECT * FROM daily_counts WHERE userId = :userId ORDER BY dateKey DESC")
     fun observeAllDays(userId: String): Flow<List<DailyCountEntity>>
 
+    @Query("SELECT * FROM daily_counts WHERE userId = :userId ORDER BY dateKey DESC LIMIT :limit")
+    fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>>
+
     @Query("SELECT COALESCE(SUM(count), 0) FROM daily_counts WHERE userId = :userId")
     fun observeTotalCount(userId: String): Flow<Long>
 

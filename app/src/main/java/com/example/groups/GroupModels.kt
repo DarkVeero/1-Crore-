@@ -40,10 +40,15 @@ data class GroupMemberProgress(
     val todayDateKey: String,
     val lifetimeTotalCount: Long,
     val weeklyCount: Long = 0L,
+    val weeklyDateKey: String = "",
     val updatedAtMillis: Long = 0L
 ) {
     fun effectiveTodayCount(currentDateKey: String = LocalDate.now().toString()): Long {
         return if (todayDateKey == currentDateKey) todayCount.coerceAtLeast(0L) else 0L
+    }
+
+    fun effectiveWeeklyCount(currentWeekKey: String = GroupLogic.currentIsoWeekKey()): Long {
+        return if (weeklyDateKey == currentWeekKey) weeklyCount.coerceAtLeast(0L) else 0L
     }
 }
 
@@ -109,9 +114,9 @@ data class GroupItem(
 
     fun weeklyTopThree(): List<GroupMemberProgress> {
         return members
-            .filter { it.weeklyCount > 0L }
+            .filter { it.effectiveWeeklyCount() > 0L }
             .sortedWith(
-                compareByDescending<GroupMemberProgress> { it.weeklyCount }
+                compareByDescending<GroupMemberProgress> { it.effectiveWeeklyCount() }
                     .thenByDescending { it.lifetimeTotalCount }
                     .thenBy { it.displayName.lowercase(Locale.US) }
                     .thenBy { it.userId }

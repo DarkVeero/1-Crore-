@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.core.content.ContextCompat
 import com.example.data.local.AppDatabase
 import com.example.groups.GroupItem
 import com.example.groups.GroupRepository
@@ -164,8 +165,7 @@ object FloatingCounterManager {
         val appContext = context.applicationContext
         if (canDrawOverlays(appContext)) {
             setPendingStartAfterPermission(appContext, false)
-            startFloatingButton(appContext)
-            return true
+            return startFloatingButton(appContext)
         }
         setPendingStartAfterPermission(appContext, true)
         if (openSettingsIfNeeded) {
@@ -187,8 +187,7 @@ object FloatingCounterManager {
         val appContext = context.applicationContext
         if (canDrawOverlays(appContext)) {
             setPendingStartAfterPermission(appContext, false)
-            startGroupFloatingButton(appContext, group)
-            return true
+            return startGroupFloatingButton(appContext, group)
         }
         setPendingGroupStartAfterPermission(appContext, group.id)
         if (openSettingsIfNeeded) {
@@ -209,13 +208,11 @@ object FloatingCounterManager {
                 if (pendingMode == MODE_GROUP_WIRE && !pendingGroupId.isNullOrBlank()) {
                     val targetGroup = GroupRepository.getGroupById(appContext, pendingGroupId)
                     if (targetGroup != null) {
-                        startGroupFloatingButton(appContext, targetGroup)
-                        return true
+                        return startGroupFloatingButton(appContext, targetGroup)
                     }
                     return false
                 }
-                startFloatingButton(appContext)
-                return true
+                return startFloatingButton(appContext)
             }
         } else if (isRunning(appContext) && !canDrawOverlays(appContext)) {
             stopFloatingButton(appContext)
@@ -243,7 +240,17 @@ object FloatingCounterManager {
         }
     }
 
-    fun startFloatingButton(context: Context) {
+    private fun scheduleOverlayRecheck(context: Context) {
+        val appContext = context.applicationContext
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            if (prefs.getBoolean(KEY_IS_RUNNING, false) && !FloatingOverlayController.isOverlayShowing()) {
+                FloatingOverlayController.showOverlayViewsIfNeeded(appContext)
+            }
+        }, 500L)
+    }
+
+    fun startFloatingButton(context: Context): Boolean {
         val appContext = context.applicationContext
         appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
@@ -268,23 +275,33 @@ object FloatingCounterManager {
             isOverCloseTarget = false
         )
 
+        var overlayAttached = false
         runCatching {
-            FloatingOverlayController.showOverlayViewsIfNeeded(appContext)
+            overlayAttached = FloatingOverlayController.showOverlayViewsIfNeeded(appContext)
         }
 
+        var serviceStarted = false
         runCatching {
             val serviceIntent = Intent(appContext, FloatingCounterService::class.java).apply {
                 action = FloatingCounterService.ACTION_SHOW
             }
-            appContext.startService(serviceIntent)
+            ContextCompat.startForegroundService(appContext, serviceIntent)
+            serviceStarted = true
         }
 
-        runCatching {
-            OneCroreWidgetProvider.updateAllWidgetsState(appContext)
+        if (!overlayAttached || !serviceStarted) {
+            appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(KEY_IS_RUNNING, false).apply()
+            _state.value = FloatingBubbleUiState()
+            runCatching { OneCroreWidgetProvider.updateAllWidgetsState(appContext) }
+            return false
+        } else {
+            runCatching { OneCroreWidgetProvider.updateAllWidgetsState(appContext) }
+            scheduleOverlayRecheck(appContext)
+            return true
         }
     }
 
-    fun startGroupFloatingButton(context: Context, group: GroupItem) {
+    fun startGroupFloatingButton(context: Context, group: GroupItem): Boolean {
         val appContext = context.applicationContext
         appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
@@ -309,26 +326,37 @@ object FloatingCounterManager {
             isOverCloseTarget = false
         )
 
+        var overlayAttached = false
         runCatching {
-            FloatingOverlayController.showOverlayViewsIfNeeded(appContext)
+            overlayAttached = FloatingOverlayController.showOverlayViewsIfNeeded(appContext)
         }
 
+        var serviceStarted = false
         runCatching {
             val serviceIntent = Intent(appContext, FloatingCounterService::class.java).apply {
                 action = FloatingCounterService.ACTION_SHOW
             }
-            appContext.startService(serviceIntent)
+            ContextCompat.startForegroundService(appContext, serviceIntent)
+            serviceStarted = true
         }
 
         // Main floating button is now OFF -> ensure home-screen widget reflects OFF state
-        runCatching {
-            OneCroreWidgetProvider.updateAllWidgetsState(appContext)
+        if (!overlayAttached || !serviceStarted) {
+            appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(KEY_IS_RUNNING, false).apply()
+            _state.value = FloatingBubbleUiState()
+            runCatching { OneCroreWidgetProvider.updateAllWidgetsState(appContext) }
+            return false
+        } else {
+            runCatching { OneCroreWidgetProvider.updateAllWidgetsState(appContext) }
+            scheduleOverlayRecheck(appContext)
+            return true
         }
     }
 
     internal fun restorePersistedFloatingMode(context: Context) {
         val appContext = context.applicationContext
         val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (!prefs.getBoolean(KEY_IS_RUNNING, false)) return
         val savedMode = prefs.getString(KEY_TARGET_MODE, MODE_MAIN_WIRE)
         val savedGroupId = prefs.getString(KEY_TARGET_GROUP_ID, null)
         if (savedMode == MODE_GROUP_WIRE && !savedGroupId.isNullOrBlank()) {
@@ -458,6 +486,11 @@ object FloatingCounterManager {
             val userId = WidgetAndFloatingBridge.resolveUserId(appContext, db, userIdOverride)
             val existingGroup = GroupRepository.getGroupById(appContext, groupId)
             if (existingGroup == null) {
+                stopFloatingButton(appContext)
+                val snap = WidgetAndFloatingBridge.readCountsFromDatabase(appContext, db, userIdOverride, todayKey)
+                return 0L to snap
+            }
+            if (existingGroup.members.none { it.userId == userId }) {
                 stopFloatingButton(appContext)
                 val snap = WidgetAndFloatingBridge.readCountsFromDatabase(appContext, db, userIdOverride, todayKey)
                 return 0L to snap

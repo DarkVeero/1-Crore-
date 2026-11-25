@@ -47,8 +47,6 @@ class DuroodRepository(
     private val profileDao = localDb.userProfileDao()
     private val dailyDao = localDb.dailyCountDao()
     private val customDao = localDb.customCounterDao()
-    private val syncMutex = Mutex()
-    private val globalStatsMutex = Mutex()
 
     private fun requireUserId(): String {
         return auth.currentUser?.uid
@@ -58,6 +56,7 @@ class DuroodRepository(
     fun observeProfile(userId: String): Flow<UserProfileEntity?> = profileDao.observeProfile(userId)
 
     fun observeAllDays(userId: String): Flow<List<DailyCountEntity>> = dailyDao.observeAllDays(userId)
+fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> = dailyDao.observeRecentDays(userId, limit)
 
     fun observeTotalCount(userId: String): Flow<Long> = dailyDao.observeTotalCount(userId)
 
@@ -274,6 +273,21 @@ class DuroodRepository(
                 userId = userId,
                 dateKey = dateKey,
                 count = clamped,
+                pendingSync = true,
+                isManualEdit = true,
+                updatedAtMillis = System.currentTimeMillis()
+            )
+        )
+    }
+
+    suspend fun adjustDayCount(userId: String, dateKey: String, delta: Long) {
+        val current = dailyDao.getDay(userId, dateKey)?.count ?: 0L
+        val newCount = (current + delta).coerceIn(0L, 100_000_000L)
+        dailyDao.upsertDay(
+            DailyCountEntity(
+                userId = userId,
+                dateKey = dateKey,
+                count = newCount,
                 pendingSync = true,
                 isManualEdit = true,
                 updatedAtMillis = System.currentTimeMillis()
@@ -654,6 +668,11 @@ class DuroodRepository(
             for ((dateKey, cloudDay) in cloudByDate) {
                 if (dateKey in pushedManualDateKeys) continue
                 val local = localMapAfterEdits[dateKey]
+        if (local != null && local.isManualEdit && local.pendingSync) {
+            pushDayToCloud(uid, local, true, countsCollection.path)
+            dailyDao.markDaySynced(uid, local.dateKey)
+            continue
+        }
                 val resolved = resolveDailyCountConflict(
                     uid = uid,
                     dateKey = dateKey,
@@ -1791,6 +1810,9 @@ class DuroodRepository(
     }
 
     companion object {
+        private val syncMutex = Mutex()
+        private val globalStatsMutex = Mutex()
+    
         const val ONE_CRORE = 10_000_000L
         const val DEFAULT_DAILY_TARGET = 2600
         const val GLOBAL_STATS_FETCH_TIMEOUT_MS = 9_000L

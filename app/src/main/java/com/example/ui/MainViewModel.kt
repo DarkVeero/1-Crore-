@@ -305,18 +305,26 @@ class MainViewModel(
         Triple(hasPending, pendingDaysCount, pendingDuroodTotal)
     }
 
+    private val optimisticTapDeltaFlow = MutableStateFlow(0L)
+    val historyAllDaysFlow: StateFlow<List<DailyCountEntity>> = repository.observeAllDays(currentUserId)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000L),
+            initialValue = emptyList()
+        )
     private val countMetricsFlow = combine(
         repository.observeProfile(currentUserId),
-        repository.observeAllDays(currentUserId),
+        repository.observeRecentDays(currentUserId, 366),
         repository.observeTotalCount(currentUserId),
         todayStateFlow,
-        pendingSummaryFlow
-    ) { profile, days, total, todayPair, pendingTriple ->
+        pendingSummaryFlow,
+        optimisticTapDeltaFlow
+    ) { profile, days, total, todayPair, pendingTriple, optimisticDelta ->
         CountMetrics(
             profile = profile,
             days = days,
-            total = total,
-            today = todayPair.second,
+            total = total + optimisticDelta,
+            today = todayPair.second + optimisticDelta,
             pending = pendingTriple.first,
             pendingDaysCount = pendingTriple.second,
             pendingDuroodTotal = pendingTriple.third,
@@ -549,7 +557,7 @@ class MainViewModel(
                 if (unseenBadge != null) {
                     pendingMilestoneBadgeFlow.value = unseenBadge
                 }
-                badgeRefreshTickFlow.value = badgeRefreshTickFlow.value + 1
+                 
             }
         }
         ensureRemindersScheduled()
@@ -760,9 +768,11 @@ class MainViewModel(
     fun getUnsyncedTapCountForTest(): Int = unsyncedTapCount
 
     fun onTapPlusOne() {
+        optimisticTapDeltaFlow.value += 1L
         viewModelScope.launch {
             val activeDateKey = refreshCurrentDate().toString()
             repository.incrementCount(currentUserId, activeDateKey, 1L)
+            optimisticTapDeltaFlow.value -= 1L
             SyncWorker.enqueueWhenOnline(appContext)
             unsyncedTapCount++
             if (unsyncedTapCount >= BATCH_SYNC_TAP_THRESHOLD) {
@@ -795,9 +805,9 @@ class MainViewModel(
         }
     }
 
-    fun onEditDayCount(dateKey: String, newCount: Long) {
+    fun onEditDayCount(dateKey: String, newCount: Long, oldCount: Long) {
         viewModelScope.launch {
-            repository.setDayCount(currentUserId, dateKey, newCount)
+            repository.adjustDayCount(currentUserId, dateKey, newCount - oldCount)
             SyncWorker.enqueueWhenOnline(appContext)
             if (NetworkMonitor.isCurrentlyOnline(appContext)) {
                 triggerSync(silent = true)
@@ -1865,7 +1875,8 @@ class MainViewModel(
                 pendingInstallReady = true,
                 errorMessage = null
             )
-            val launched = AppUpdateManager.launchApkInstaller(appContext, apkFile)
+            triggerSync(silent = true)
+        val launched = AppUpdateManager.launchApkInstaller(appContext, apkFile)
             if (!launched) {
                 updateStateFlow.value = updateStateFlow.value.copy(
                     errorMessage = "Could not open the Android installer for the downloaded APK."
@@ -1882,7 +1893,8 @@ class MainViewModel(
         val readyFile = downloadedApkFile
         if (state.pendingInstallReady && readyFile != null && readyFile.exists()) {
             if (AppUpdateManager.canInstallPackages(appContext)) {
-                val launched = AppUpdateManager.launchApkInstaller(appContext, readyFile)
+                triggerSync(silent = true)
+            val launched = AppUpdateManager.launchApkInstaller(appContext, readyFile)
                 if (!launched) {
                     updateStateFlow.value = state.copy(
                         errorMessage = "Could not open the Android installer. Please try again."
@@ -2378,21 +2390,19 @@ class MainViewModel(
 
     fun deleteAccount(onSuccess: () -> Unit) {
         viewModelScope.launch {
+            val result = repository.deleteAllUserData(currentUserId)
+            if (result.isFailure) { statusMessageFlow.value = result.exceptionOrNull()?.localizedMessage ?: "Delete failed. Please try again."; return@launch }
             ReminderScheduler.cancelAll(appContext)
             val currentGroups = GroupRepository.getGroupsForUser(appContext, currentUserId)
             currentGroups.forEach { group ->
                 GroupRepository.leaveGroup(appContext, currentUserId, group.id)
             }
-            val result = repository.deleteAllUserData(currentUserId)
-            result.fold(
-                onSuccess = {
-                    AuthFlowStore.clearUser(appContext, currentUserId)
-                    MilestoneBadgeManager.clearUser(appContext, currentUserId)
-                    GroupCelebrationStore.clearUser(appContext, currentUserId)
-                    onSuccess()
-                },
-                onFailure = { err ->
-                    statusMessageFlow.value = err.localizedMessage ?: "Delete failed. Please try again."
+            result.onSuccess({
+                // Guard above already returned on failure, so this always runs.
+                AuthFlowStore.clearUser(appContext, currentUserId)
+                MilestoneBadgeManager.clearUser(appContext, currentUserId)
+                GroupCelebrationStore.clearUser(appContext, currentUserId)
+                onSuccess()
                 }
             )
         }

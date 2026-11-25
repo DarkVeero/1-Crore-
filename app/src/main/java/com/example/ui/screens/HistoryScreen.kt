@@ -55,6 +55,7 @@ import java.util.Locale
 private data class PendingReduction(
     val dateKey: String,
     val newCount: Long,
+        val oldCount: Long,
     val oldTotal: Long,
     val newTotal: Long
 )
@@ -62,7 +63,8 @@ private data class PendingReduction(
 @Composable
 fun HistoryScreen(
     uiState: MainUiState,
-    onEditDayCount: (dateKey: String, newCount: Long) -> Unit,
+    historyDays: List<DailyCountEntity>,
+    onEditDayCount: (dateKey: String, newCount: Long, oldCount: Long) -> Unit,
     onOpenMessagesHistory: () -> Unit = {}
 ) {
     val palette = AppThemeColors.palette
@@ -71,7 +73,7 @@ fun HistoryScreen(
     var showAddDateDialog by remember { mutableStateOf(false) }
     var pendingReduction by remember { mutableStateOf<PendingReduction?>(null) }
 
-    val sortedDays = uiState.allDays.sortedByDescending { it.dateKey }
+    val sortedDays = historyDays.sortedByDescending { it.dateKey }
 
     Box(modifier = Modifier.fillMaxSize()) {
         FaintGridBackground()
@@ -192,12 +194,13 @@ fun HistoryScreen(
                     val newTotal = (oldTotal - editingInitialCount + safeNew).coerceAtLeast(0L)
                     pendingReduction = PendingReduction(
                         dateKey = activeEditKey,
+                        oldCount = editingInitialCount,
                         newCount = safeNew,
                         oldTotal = oldTotal,
                         newTotal = newTotal
                     )
                 } else {
-                    onEditDayCount(activeEditKey, safeNew)
+                    onEditDayCount(activeEditKey, safeNew, editingInitialCount)
                     editingDateKey = null
                 }
             }
@@ -218,12 +221,13 @@ fun HistoryScreen(
                     val newTotal = (oldTotal - oldDayCount + safeNew).coerceAtLeast(0L)
                     pendingReduction = PendingReduction(
                         dateKey = dateKey,
+                        oldCount = oldDayCount,
                         newCount = safeNew,
                         oldTotal = oldTotal,
                         newTotal = newTotal
                     )
                 } else {
-                    onEditDayCount(dateKey, safeNew)
+                    onEditDayCount(dateKey, safeNew, oldDayCount)
                     showAddDateDialog = false
                 }
             }
@@ -246,7 +250,7 @@ fun HistoryScreen(
             },
             text = {
                 Text(
-                    text = "Are you sure? This will reduce your total from ${formatNumber(reduction.oldTotal)} to ${formatNumber(reduction.newTotal)}",
+                    text = "Are you sure? This will reduce your total from ${formatNumber(uiState.totalCount)} to ${formatNumber((uiState.totalCount - reduction.oldCount + reduction.newCount).coerceAtLeast(0L))}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = palette.onCard
                 )
@@ -262,7 +266,7 @@ fun HistoryScreen(
                     BlackPillButton(
                         text = "Yes, reduce",
                         onClick = {
-                            onEditDayCount(reduction.dateKey, reduction.newCount)
+                            onEditDayCount(reduction.dateKey, reduction.newCount, reduction.oldCount)
                             pendingReduction = null
                             editingDateKey = null
                             showAddDateDialog = false

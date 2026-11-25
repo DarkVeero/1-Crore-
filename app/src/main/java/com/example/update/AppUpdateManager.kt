@@ -201,6 +201,7 @@ object AppUpdateManager {
     private val KEY_CACHED_UPDATE_JSON = stringPreferencesKey("cached_update_json")
     private val KEY_LATEST_APK_URL = stringPreferencesKey("latest_apk_url")
     private val KEY_LATEST_APK_VERSION_NAME = stringPreferencesKey("latest_apk_version_name")
+    private val KEY_PENDING_DOWNLOAD_ID = longPreferencesKey("pending_download_id")
 
     @Volatile
     private var dismissedVersionInSession: Int = 0
@@ -274,7 +275,7 @@ object AppUpdateManager {
         val candidate = rawUrl?.trim()?.takeIf { it.startsWith("https://") }
             ?: shareTargetOverrideForTest?.downloadUrl?.trim()?.takeIf { it.startsWith("https://") }
             ?: latestApkUrlMemory?.trim()?.takeIf { it.startsWith("https://") }
-        return candidate ?: UpdateConfig.UPDATE_VERSION_URL
+        return candidate ?: ""
     }
 
     private const val PROGRESS_CARD_FILE_NAME = "progress_share_card.png"
@@ -406,13 +407,15 @@ object AppUpdateManager {
             .toFloat()
             .coerceIn(0f, 1f)
         val resolvedDownloadUrl = downloadUrl?.trim()?.takeIf { it.isNotEmpty() }
-            ?: UpdateConfig.UPDATE_VERSION_URL
+            ?: ""
         val caption = buildString {
             appendLine(UpdateConfig.SHARE_APP_HEADER)
             appendLine("Today: $todayFormatted · Total: $totalFormatted / 10,000,000 ($percentFormatted)")
             appendLine()
             appendLine(UpdateConfig.SHARE_APP_DOWNLOAD_CTA)
-            appendLine(resolvedDownloadUrl)
+            if (resolvedDownloadUrl.isNotBlank()) {
+                appendLine(resolvedDownloadUrl)
+            }
         }.trim()
         return ProgressShareCardSpec(
             todayCount = safeToday,
@@ -874,6 +877,24 @@ object AppUpdateManager {
         }
     }
 
+    private suspend fun findResumableDownloadId(context: Context): Long {
+        val dm = context.applicationContext.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager ?: return -1L
+        val persistedId = context.applicationContext.updatePrefs.data.first()[KEY_PENDING_DOWNLOAD_ID] ?: return -1L
+        if (persistedId <= 0L) return -1L
+        var status = -1
+        dm.query(DownloadManager.Query().setFilterById(persistedId))?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+            }
+        }
+        return if (status == DownloadManager.STATUS_RUNNING || status == DownloadManager.STATUS_PAUSED || status == DownloadManager.STATUS_PENDING) {
+            persistedId
+        } else {
+            context.applicationContext.updatePrefs.edit { it.remove(KEY_PENDING_DOWNLOAD_ID) }
+            -1L
+        }
+    }
+
     fun downloadApk(context: Context, update: AppUpdateInfo): Flow<ApkDownloadState> = flow {
         if (!update.downloadUrl.startsWith("https://")) {
             emit(ApkDownloadState.Failed("Invalid APK download link."))
@@ -892,7 +913,8 @@ object AppUpdateManager {
 
         val fileName = "1crore-update-${update.versionCode}.apk"
         val destFile = File(downloadsDir, fileName)
-        if (destFile.exists()) {
+        val resumedId = findResumableDownloadId(appContext)
+        if (resumedId < 0L && destFile.exists()) {
             destFile.delete()
         }
 
@@ -902,7 +924,7 @@ object AppUpdateManager {
             return@flow
         }
 
-        val downloadId = try {
+        val downloadId = if (resumedId > 0L) resumedId else try {
             val request = DownloadManager.Request(Uri.parse(update.downloadUrl)).apply {
                 setTitle("1 Crore ${update.versionName}")
                 setDescription("Downloading app update")
@@ -918,10 +940,15 @@ object AppUpdateManager {
             return@flow
         }
 
-        emit(ApkDownloadState.Downloading(downloadId, bytesDownloaded = 0L, totalBytes = -1L))
+        if (resumedId < 0L) {
+            appContext.updatePrefs.edit { it[KEY_PENDING_DOWNLOAD_ID] = downloadId }
+        }
+emit(ApkDownloadState.Downloading(downloadId, bytesDownloaded = 0L, totalBytes = -1L))
 
         val query = DownloadManager.Query().setFilterById(downloadId)
         var finishedNormally = false
+        var lastProgressBytes = 0L
+        var lastProgressAtMillis = System.currentTimeMillis()
         try {
             while (true) {
                 var status = -1
@@ -979,7 +1006,18 @@ object AppUpdateManager {
                     }
 
                     else -> {
-                        emit(ApkDownloadState.Downloading(downloadId, bytesDownloaded, totalBytes))
+                        if (bytesDownloaded > lastProgressBytes) {
+                        lastProgressBytes = bytesDownloaded
+                        lastProgressAtMillis = System.currentTimeMillis()
+                    } else if (System.currentTimeMillis() - lastProgressAtMillis > 60_000L) {
+                        runCatching { dm.remove(downloadId) }
+                        runCatching { if (destFile.exists()) destFile.delete() }
+                        appContext.updatePrefs.edit { it.remove(KEY_PENDING_DOWNLOAD_ID) }
+                        emit(ApkDownloadState.Failed("Download stalled. Please check your connection and try again."))
+                        finishedNormally = true
+                        break
+                    }
+emit(ApkDownloadState.Downloading(downloadId, bytesDownloaded, totalBytes))
                     }
                 }
 

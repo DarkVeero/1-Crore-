@@ -42,6 +42,9 @@ class OneCroreWidgetProvider : AppWidgetProvider() {
     }
 
     companion object {
+        private var lastPushedToday: Long? = null
+        private var lastPushedTotal: Long? = null
+        private var lastPushedFloating: Boolean? = null
         const val EXTRA_WIDGET_ACTION = "extra_one_crore_widget_action"
         const val ACTION_WIDGET_ADD_CUSTOM = "widget_action_add_custom"
         const val ACTION_WIDGET_OPEN_COUNTER = "widget_action_open_counter"
@@ -65,7 +68,6 @@ class OneCroreWidgetProvider : AppWidgetProvider() {
             }
             return if (FloatingCounterManager.canDrawOverlays(appContext)) {
                 FloatingCounterManager.startFloatingButton(appContext)
-                true
             } else {
                 FloatingCounterManager.setPendingStartAfterPermission(appContext, true)
                 val launchIntent = Intent(appContext, MainActivity::class.java).apply {
@@ -177,6 +179,10 @@ class OneCroreWidgetProvider : AppWidgetProvider() {
             val appContext = context.applicationContext
             WidgetAndFloatingBridge.cacheLatestCounts(appContext, todayCount, totalCount)
             val isFloatingRunning = FloatingCounterManager.isMainRunning(appContext)
+        if (lastPushedToday == todayCount && lastPushedTotal == totalCount && lastPushedFloating == isFloatingRunning) return
+        lastPushedToday = todayCount
+        lastPushedTotal = totalCount
+        lastPushedFloating = isFloatingRunning
             runCatching {
                 val manager = AppWidgetManager.getInstance(appContext) ?: return
                 val component = ComponentName(appContext, OneCroreWidgetProvider::class.java)

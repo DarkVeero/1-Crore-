@@ -44,7 +44,7 @@ class SyncWorker(
                 .build()
             try {
                 WorkManager.getInstance(appContext)
-                    .enqueueUniqueWork(UNIQUE_SYNC_WORK, ExistingWorkPolicy.REPLACE, request)
+                    .enqueueUniqueWork(UNIQUE_SYNC_WORK, ExistingWorkPolicy.KEEP, request)
             } catch (_: IllegalStateException) {
                 // Ignored in test environments where WorkManager is intentionally uninitialized
             }

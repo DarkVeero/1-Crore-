@@ -3,6 +3,12 @@ package com.example.floating
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.app.Service
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import androidx.core.app.NotificationCompat
+import com.example.MainActivity
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -99,6 +105,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -112,13 +119,16 @@ class FloatingCounterService : Service() {
             ACTION_HIDE -> {
                 FloatingCounterManager.stopFloatingButton(applicationContext)
                 FloatingOverlayController.removeOverlayViews()
+                stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 return START_NOT_STICKY
             }
             else -> {
+            startForeground(FOREGROUND_NOTIFICATION_ID, buildForegroundNotification())
                 if (!FloatingCounterManager.canDrawOverlays(applicationContext)) {
                     FloatingCounterManager.stopFloatingButton(applicationContext)
                     FloatingOverlayController.removeOverlayViews()
+                    stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
                     return START_NOT_STICKY
                 }
@@ -132,6 +142,37 @@ class FloatingCounterService : Service() {
         }
     }
 
+    private fun buildForegroundNotification(): Notification {
+        ensureForegroundNotificationChannel()
+        val launchIntent = Intent(applicationContext, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            applicationContext,
+            0,
+            launchIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        return NotificationCompat.Builder(applicationContext, FOREGROUND_CHANNEL_ID)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle("1 Crore floating button on hai")
+            .setContentIntent(pendingIntent)
+            .setOngoing(true)
+            .build()
+    }
+
+    private fun ensureForegroundNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+            val channel = NotificationChannel(
+                FOREGROUND_CHANNEL_ID,
+                "Floating button",
+                NotificationManager.IMPORTANCE_LOW
+            )
+            manager.createNotificationChannel(channel)
+        }
+    }
+
     override fun onDestroy() {
         if (!FloatingCounterManager.state.value.isRunning) {
             FloatingOverlayController.removeOverlayViews()
@@ -142,6 +183,8 @@ class FloatingCounterService : Service() {
     companion object {
         const val ACTION_SHOW = "com.example.floating.ACTION_SHOW"
         const val ACTION_HIDE = "com.example.floating.ACTION_HIDE"
+        private const val FOREGROUND_CHANNEL_ID = "one_crore_floating_button"
+        private const val FOREGROUND_NOTIFICATION_ID = 1001
     }
 }
 
@@ -448,7 +491,7 @@ internal object FloatingOverlayController {
         flashClearRunnable?.let { mainHandler.removeCallbacks(it) }
 
         overlayScope.launch {
-            val (resultValue, _) = FloatingCounterManager.onFloatingButtonTapped(appContext)
+            val (resultValue, _) = withContext(Dispatchers.IO) { FloatingCounterManager.onFloatingButtonTapped(appContext) }
             val latestState = FloatingCounterManager.state.value
             if (!latestState.isRunning) {
                 removeOverlayViews()

@@ -1094,7 +1094,11 @@ fun GroupDetailScreen(
                     onClick = {
                         if (parsedAmount > 0L) {
                             val signedDelta = if (mainCustomIsReduce) -parsedAmount else parsedAmount
-                            onAdjustMainGroupCount(group.id, signedDelta)
+                            if (group.type == GroupType.CUSTOM_ZIKR) {
+                                onIncrementCustomZikr(group.id, signedDelta)
+                            } else {
+                                onAdjustMainGroupCount(group.id, signedDelta)
+                            }
                         }
                         mainCustomAmountText = ""
                         showMainCustomDialog = false

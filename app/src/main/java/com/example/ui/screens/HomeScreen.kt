@@ -751,7 +751,7 @@ private fun AnimatedArabicGreeting(
 
     LaunchedEffect(reduceMotion) {
         if (!reduceMotion) {
-            while (true) {
+            repeat(2) {
                 greetingAlpha.snapTo(1f)
                 visibleClusters = 0
                 delay(200L)
@@ -767,6 +767,8 @@ private fun AnimatedArabicGreeting(
                 visibleClusters = 0
                 delay(300L)
             }
+        greetingAlpha.snapTo(1f)
+            visibleClusters = clusterEnds.size
         } else {
             greetingAlpha.snapTo(1f)
             visibleClusters = clusterEnds.size
