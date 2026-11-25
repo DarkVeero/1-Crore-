@@ -727,7 +727,8 @@ internal fun MainTabScaffold(
                         )
                     }
                     composable(AppTab.STATS.route) {
-                        StatsScreen(uiState = uiState)
+                        val historyDays by viewModel.historyAllDaysFlow.collectAsStateWithLifecycle()
+                        StatsScreen(uiState = uiState.copy(allDays = historyDays))
                     }
                     composable(AppTab.SETTINGS.route) {
                         SettingsScreen(

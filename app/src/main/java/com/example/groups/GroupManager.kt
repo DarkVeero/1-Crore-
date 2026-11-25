@@ -123,6 +123,21 @@ object GroupRepository {
             .apply()
     }
 
+    fun clearLocalGroupsStore(context: Context) {
+        context.applicationContext
+        .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .edit()
+        .remove(KEY_GROUPS_JSON)
+        .remove(KEY_DELETED_GROUP_IDS)
+        .remove(KEY_PENDING_CREATE_SYNC_IDS)
+        .remove(KEY_PENDING_JOIN_SYNC_IDS)
+        .remove(KEY_PENDING_LEAVE_SYNC_IDS)
+        .remove(KEY_PENDING_DELETE_SYNC_IDS)
+        .remove(KEY_DIRTY_GROUP_SYNC_IDS)
+        .remove(KEY_GROUP_FLOATING_UNSYNCED_TAPS)
+        .apply()
+    }
+
     private fun markGroupDeletedLocally(context: Context, groupId: String) {
         if (groupId.isBlank()) return
         val deleted = readStringSet(context, KEY_DELETED_GROUP_IDS)
@@ -907,6 +922,20 @@ object GroupRepository {
             pendingDeletes.forEach { pendingId ->
                 deleteGroupInFirestoreBestEffort(context, pendingId)
                 markPendingDeleteSync(context, pendingId, pending = false)
+            }
+        }
+        // Retry any locally joined groups whose cloud member add hasn't succeeded yet.
+        val pendingJoinIds = readStringSet(context, KEY_PENDING_JOIN_SYNC_IDS).toList()
+        if (pendingJoinIds.isNotEmpty()) {
+            val allLocal = readAllGroups(context)
+            pendingJoinIds.forEach { pendingId ->
+                val pendingGroup = allLocal[pendingId]
+                val pendingMember = pendingGroup?.members?.firstOrNull { it.userId == userId }
+                if (pendingMember == null) {
+                    markPendingJoinSync(context, pendingId, pending = false)
+                } else if (joinMemberInFirestoreTransaction(context = context, groupId = pendingId, member = pendingMember, nowMillis = System.currentTimeMillis()) is CloudJoinOutcome.Success) {
+                    markPendingJoinSync(context, pendingId, pending = false)
+                }
             }
         }
         val snap = runCatching {

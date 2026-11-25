@@ -178,7 +178,7 @@ data class MainUiState(
     val averagePerActiveDay: Long
         get() {
             val active = activeDaysCount
-            return if (active == 0) 0L else totalCount / active
+            return if (active == 0) 0L else allDays.sumOf { it.count } / active
         }
 
     val currentStreak: Int
@@ -777,8 +777,12 @@ class MainViewModel(
         optimisticTapDeltaFlow.value += 1L
         viewModelScope.launch {
             val activeDateKey = refreshCurrentDate().toString()
+            try {
             repository.incrementCount(currentUserId, activeDateKey, 1L)
+        } finally {
             optimisticTapDeltaFlow.value -= 1L
+        }
+             
             SyncWorker.enqueueWhenOnline(appContext)
             unsyncedTapCount++
             if (unsyncedTapCount >= BATCH_SYNC_TAP_THRESHOLD) {
@@ -997,8 +1001,12 @@ class MainViewModel(
             }
             val hadPendingSyncBefore = repository.getProfileOnce(currentUserId)?.pendingSync == true
             isSyncingFlow.value = true
-            val result = repository.syncWithCloud()
+            val result = try {
+            repository.syncWithCloud()
+        } finally {
             isSyncingFlow.value = false
+        }
+             
             if (result.isSuccess) {
                 val profile = repository.getProfileOnce(currentUserId)
                 if (profile != null && !hadPendingSyncBefore && !profile.pendingSync) {
@@ -1966,7 +1974,9 @@ class MainViewModel(
                             pendingInstallReady = true,
                             errorMessage = null
                         )
-                        val launched = AppUpdateManager.launchApkInstaller(appContext, downloadState.apkFile)
+                        // Sync once more before the installer opens, so the latest counts are on the server before the update restarts the app. A failed sync must never block the installer.
+            runCatching { repository.syncWithCloud() }
+            val launched = AppUpdateManager.launchApkInstaller(appContext, downloadState.apkFile)
                         if (!launched) {
                             updateStateFlow.value = updateStateFlow.value.copy(
                                 errorMessage = "Could not open the Android installer for this APK."
@@ -2396,18 +2406,21 @@ class MainViewModel(
 
     fun deleteAccount(onSuccess: () -> Unit) {
         viewModelScope.launch {
-            val result = repository.deleteAllUserData(currentUserId)
-            if (result.isFailure) { statusMessageFlow.value = result.exceptionOrNull()?.localizedMessage ?: "Delete failed. Please try again."; return@launch }
+             
+             
             ReminderScheduler.cancelAll(appContext)
             val currentGroups = GroupRepository.getGroupsForUser(appContext, currentUserId)
             currentGroups.forEach { group ->
                 GroupRepository.leaveGroup(appContext, currentUserId, group.id)
             }
-            result.onSuccess({
+            val result = repository.deleteAllUserData(currentUserId)
+        if (result.isFailure) { statusMessageFlow.value = result.exceptionOrNull()?.localizedMessage ?: "Delete failed. Please try again."; return@launch }
+        result.onSuccess({
                 // Guard above already returned on failure, so this always runs.
                 AuthFlowStore.clearUser(appContext, currentUserId)
                 MilestoneBadgeManager.clearUser(appContext, currentUserId)
                 GroupCelebrationStore.clearUser(appContext, currentUserId)
+                GroupRepository.clearLocalGroupsStore(appContext)
                 onSuccess()
                 }
             )

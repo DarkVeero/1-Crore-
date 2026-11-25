@@ -377,9 +377,11 @@ object AppUpdateManager {
         appendLine(UpdateConfig.SHARE_APP_TASBIH_NOTE)
         appendLine(UpdateConfig.SHARE_APP_INVITE_CTA)
         appendLine()
-        appendLine(UpdateConfig.SHARE_APP_DOWNLOAD_CTA)
+        if (!downloadUrl.isNullOrBlank()) {
+            appendLine(UpdateConfig.SHARE_APP_DOWNLOAD_CTA)
         appendLine()
-        appendLine(UpdateConfig.SHARE_APP_DOWNLOAD_POINTERS)
+            appendLine(UpdateConfig.SHARE_APP_DOWNLOAD_POINTERS)
+        }
         if (!downloadUrl.isNullOrBlank()) {
             appendLine(downloadUrl)
         }

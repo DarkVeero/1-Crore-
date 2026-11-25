@@ -199,7 +199,7 @@ object MilestoneBadgeManager {
             nowMillis = nowMillis
         )
         return if (progress.earnedCount > progress.celebratedTier) {
-            badgeForTier(progress.earnedCount)
+            badgeForTier(progress.celebratedTier + 1)
         } else {
             null
         }
