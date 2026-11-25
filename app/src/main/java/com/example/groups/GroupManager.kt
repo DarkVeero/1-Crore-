@@ -1023,10 +1023,8 @@ object GroupRepository {
         val pendingLeaves = readStringSet(context, KEY_PENDING_LEAVE_SYNC_IDS).toList()
         if (pendingLeaves.isNotEmpty()) {
             pendingLeaves.forEach { pendingId ->
-                if (removeMemberInFirestoreTransactionBestEffort(context, pendingId, userId, System.currentTimeMillis())) {
+                removeMemberInFirestoreTransactionBestEffort(context, pendingId, userId, System.currentTimeMillis())
                 markPendingLeaveSync(context, pendingId, pending = false)
-            }
-            }
         }
         // Retry any locally deleted groups whose cloud deletion hasn't succeeded yet.
         val pendingDeletes = readStringSet(context, KEY_PENDING_DELETE_SYNC_IDS).toList()

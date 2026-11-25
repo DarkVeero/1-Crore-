@@ -732,6 +732,8 @@ internal fun MainTabScaffold(
                         StatsScreen(uiState = uiState.copy(allDays = historyDays))
                     }
                     composable(AppTab.SETTINGS.route) {
+        val hasPasswordLinked = Firebase.auth.currentUser?.providerData?.any { it.providerId == EmailAuthProvider.PROVIDER_ID } == true
+        val credentialManager = CredentialManager.create(context)
                         SettingsScreen(
                             uiState = uiState,
                             onUpdateDisplayName = viewModel::onUpdateDisplayName,
