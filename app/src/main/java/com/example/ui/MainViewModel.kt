@@ -319,7 +319,13 @@ class MainViewModel(
         todayStateFlow,
         pendingSummaryFlow,
         optimisticTapDeltaFlow
-    ) { profile: UserProfileEntity?, days: List<DailyCountEntity>, total: Long, todayPair: Pair<LocalDate, Long>, pendingTriple: Triple<Boolean, Int, Long>, optimisticDelta: Long ->
+    ) { args ->
+        val profile = args[0] as UserProfileEntity?
+        val days = args[1] as List<DailyCountEntity>
+        val total = args[2] as Long
+        val todayPair = args[3] as Pair<LocalDate, Long>
+        val pendingTriple = args[4] as Triple<Boolean, Int, Long>
+        val optimisticDelta = args[5] as Long
         CountMetrics(
             profile = profile,
             days = days,
