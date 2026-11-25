@@ -446,7 +446,7 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
                 }
             }
 
-            Result.success(RestoreOutcome(restoredItems, payload.droppedDays + payload.droppedCounters)))
+            Result.success(RestoreOutcome(restoredItems, payload.droppedDays + payload.droppedCounters))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
