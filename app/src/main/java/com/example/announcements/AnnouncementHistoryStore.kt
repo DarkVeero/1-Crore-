@@ -135,6 +135,61 @@ object AnnouncementHistoryStore {
         }
     }
 
+    fun mergeWithCloudAnnouncements(
+        localEntries: List<AnnouncementHistoryEntry>,
+        cloudAnnouncements: List<AnnouncementItem>?
+    ): List<AnnouncementHistoryEntry> {
+        if (cloudAnnouncements == null) {
+            return localEntries
+                .sortedWith(
+                    compareByDescending<AnnouncementHistoryEntry> { it.recordedAtMillis }
+                        .thenBy { it.announcement.id }
+                )
+                .take(MAX_HISTORY_ITEMS)
+        }
+
+        val distinctCloud = buildList {
+            val seenIds = mutableSetOf<String>()
+            cloudAnnouncements.forEach { item ->
+                if (item.id.isNotBlank() && seenIds.add(item.id)) {
+                    add(item)
+                }
+            }
+        }
+        val cloudIds = distinctCloud.map { it.id }.toSet()
+
+        val keptLocal = buildList {
+            val seenLocalIds = mutableSetOf<String>()
+            localEntries.forEach { entry ->
+                val id = entry.announcement.id
+                if (id.isBlank() || !seenLocalIds.add(id)) return@forEach
+                val inCloud = id in cloudIds
+                val isMilestone = MilestoneAnnouncementManager.isMilestoneAnnouncementId(id)
+                if (inCloud || isMilestone) {
+                    add(entry)
+                }
+            }
+        }
+        val keptIds = keptLocal.map { it.announcement.id }.toSet()
+
+        val cloudOnlyEntries = distinctCloud
+            .filter { it.id !in keptIds }
+            .map { item ->
+                AnnouncementHistoryEntry(
+                    announcement = item,
+                    recordedAtMillis = item.startAtMillis,
+                    status = STATUS_SHOWN
+                )
+            }
+
+        return (keptLocal + cloudOnlyEntries)
+            .sortedWith(
+                compareByDescending<AnnouncementHistoryEntry> { it.recordedAtMillis }
+                    .thenBy { it.announcement.id }
+            )
+            .take(MAX_HISTORY_ITEMS)
+    }
+
     fun resetForTest(context: Context) {
         context.applicationContext
             .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

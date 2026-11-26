@@ -45,6 +45,7 @@ import com.example.update.AppUpdateInfo
 import com.example.update.AppUpdateManager
 import com.example.widget.OneCroreWidgetProvider
 import com.example.widget.WidgetAndFloatingBridge
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -273,6 +274,9 @@ class MainViewModel(
     private val dirtyGroupSyncIds = mutableSetOf<String>()
     private var announcementRetryJob: Job? = null
     private var announcementRefreshJob: Job? = null
+    private var announcementHistoryRefreshJob: Job? = null
+    private var latestCloudAnnouncementsForHistory: List<AnnouncementItem>? = null
+    private var lastHistoryCloudFetchMillis: Long = 0L
     private val announcementRefreshToken = AtomicLong(0L)
     private var activeDownloadJob: Job? = null
     private var activeDownloadId: Long? = null
@@ -763,6 +767,7 @@ class MainViewModel(
         globalStatsRetryJob?.cancel()
         announcementRetryJob?.cancel()
         announcementRefreshJob?.cancel()
+        announcementHistoryRefreshJob?.cancel()
         openGroupFlushJob?.cancel()
         openGroupRefreshJob?.cancel()
         globalStatsListenerRemover?.invoke()
@@ -1356,12 +1361,48 @@ class MainViewModel(
         }
     }
 
-    fun refreshAnnouncementHistory() {
+    private fun applyMergedAnnouncementHistory(
+        cloudAnnouncements: List<AnnouncementItem>? = latestCloudAnnouncementsForHistory
+    ) {
         AnnouncementHistoryStore.pruneExpiredAnnouncements(appContext, currentUserId)
-        announcementHistoryFlow.value = AnnouncementHistoryStore.getHistoryNewestFirst(
+        val localHistory = AnnouncementHistoryStore.getHistoryNewestFirst(
             appContext,
             currentUserId
         )
+        announcementHistoryFlow.value = AnnouncementHistoryStore.mergeWithCloudAnnouncements(
+            localEntries = localHistory,
+            cloudAnnouncements = cloudAnnouncements
+        )
+    }
+
+    fun refreshAnnouncementHistory() {
+        val now = System.currentTimeMillis()
+        if (!NetworkMonitor.isCurrentlyOnline(appContext)) {
+            applyMergedAnnouncementHistory(cloudAnnouncements = null)
+            return
+        }
+        applyMergedAnnouncementHistory(cloudAnnouncements = latestCloudAnnouncementsForHistory)
+        if (announcementHistoryRefreshJob?.isActive == true || now - lastHistoryCloudFetchMillis < 2_000L) {
+            return
+        }
+        lastHistoryCloudFetchMillis = now
+        announcementHistoryRefreshJob = viewModelScope.launch {
+            val fetchResult = try {
+                repository.fetchActiveAnnouncementsDetailed(nowMillis = System.currentTimeMillis())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            }
+            if (fetchResult != null && !fetchResult.hadTransientError) {
+                latestCloudAnnouncementsForHistory = fetchResult.items
+                lastHistoryCloudFetchMillis = System.currentTimeMillis()
+                applyMergedAnnouncementHistory(cloudAnnouncements = fetchResult.items)
+            } else {
+                latestCloudAnnouncementsForHistory = null
+                applyMergedAnnouncementHistory(cloudAnnouncements = null)
+            }
+        }
     }
 
     internal suspend fun performAnnouncementRefresh(
@@ -1397,6 +1438,9 @@ class MainViewModel(
         )
 
         if (fetchResult.hadTransientError) {
+            latestCloudAnnouncementsForHistory = null
+            lastHistoryCloudFetchMillis = System.currentTimeMillis()
+            applyMergedAnnouncementHistory(cloudAnnouncements = null)
             val fallbackCandidates = buildList {
                 val seenIds = mutableSetOf<String>()
                 localActive.forEach {
@@ -1434,6 +1478,10 @@ class MainViewModel(
             startAnnouncementBootstrapRetry(refreshToken)
             return
         }
+
+        latestCloudAnnouncementsForHistory = fetchResult.items
+        lastHistoryCloudFetchMillis = System.currentTimeMillis()
+        applyMergedAnnouncementHistory(cloudAnnouncements = fetchResult.items)
 
         val mergedCandidates = buildList {
             val seenIds = mutableSetOf<String>()
@@ -1525,6 +1573,9 @@ class MainViewModel(
                     nowMillis = now
                 )
                 if (fetchResult.hadTransientError) {
+                    latestCloudAnnouncementsForHistory = null
+                    lastHistoryCloudFetchMillis = System.currentTimeMillis()
+                    applyMergedAnnouncementHistory(cloudAnnouncements = null)
                     val localActive = AnnouncementScheduleStore.getActiveAnnouncementsAt(appContext, now)
                     if (localActive.isEmpty() && milestoneCandidates.isEmpty()) {
                         activeAnnouncementFlow.value = null
@@ -1535,6 +1586,9 @@ class MainViewModel(
                     )
                     continue
                 }
+                latestCloudAnnouncementsForHistory = fetchResult.items
+                lastHistoryCloudFetchMillis = System.currentTimeMillis()
+                applyMergedAnnouncementHistory(cloudAnnouncements = fetchResult.items)
                 val localActive = AnnouncementScheduleStore.getActiveAnnouncementsAt(appContext, now)
                 val mergedCandidates = buildList {
                     val seenIds = mutableSetOf<String>()
