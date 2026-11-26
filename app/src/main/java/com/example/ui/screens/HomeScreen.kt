@@ -11,6 +11,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -72,6 +74,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.announcements.AnnouncementItem
@@ -843,7 +846,7 @@ internal fun AppUpdateDialog(
     val palette = AppThemeColors.palette
     val busy = isPreparing || isDownloading
     val canDismiss = !update.isForced
-    AlertDialog(
+    Dialog(
         onDismissRequest = {
             if (canDismiss) {
                 onDismiss()
@@ -851,134 +854,165 @@ internal fun AppUpdateDialog(
         },
         properties = DialogProperties(
             dismissOnBackPress = canDismiss,
-            dismissOnClickOutside = canDismiss
-        ),
-        containerColor = palette.cardSurface,
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier
-            .border(1.dp, palette.strongBorder, RoundedCornerShape(16.dp))
-            .testTag("app_update_dialog"),
-        title = {
-            Text(
-                text = "Version ${update.versionName} is available",
-                style = MaterialTheme.typography.titleLarge,
-                color = palette.onCard,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.testTag("update_dialog_title")
-            )
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (update.changelog.isNotBlank()) {
-                    Text(
-                        text = update.changelog,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = palette.onCard,
-                        modifier = Modifier.testTag("update_dialog_changelog")
-                    )
-                }
-                if (update.isForced) {
-                    Text(
-                        text = "This update contains a critical data-safety or bug fix and is required to continue.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = palette.onCardSubtext,
-                        modifier = Modifier.testTag("update_dialog_forced_notice")
-                    )
-                }
-                if (isPreparing || isDownloading) {
-                    if (downloadProgress != null && isDownloading) {
-                        LinearProgressIndicator(
-                            progress = { downloadProgress },
-                            color = palette.accent,
-                            trackColor = palette.track,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("update_download_progress_bar")
-                        )
-                    } else {
-                        LinearProgressIndicator(
-                            color = palette.accent,
-                            trackColor = palette.track,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("update_download_progress_bar")
-                        )
+            dismissOnClickOutside = canDismiss,
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        val scrimInteraction = remember { MutableInteractionSource() }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(palette.scrim)
+                .clickable(
+                    interactionSource = scrimInteraction,
+                    indication = null,
+                    onClick = {
+                        if (canDismiss) {
+                            onDismiss()
+                        }
                     }
+                )
+                .testTag("app_update_dialog_scrim"),
+            contentAlignment = Alignment.Center
+        ) {
+            Surface(
+                color = palette.cardSurface,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .padding(horizontal = 24.dp, vertical = 24.dp)
+                    .widthIn(max = 420.dp)
+                    .heightIn(max = 600.dp)
+                    .fillMaxWidth()
+                    .border(1.dp, palette.strongBorder, RoundedCornerShape(16.dp))
+                    .testTag("app_update_dialog")
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     Text(
-                        text = downloadStatusText ?: if (isPreparing) {
-                            "Syncing your counts to cloud before updating..."
-                        } else {
-                            "Downloading update..."
-                        },
-                        style = MaterialTheme.typography.labelMedium,
-                        color = palette.onCardSubtext,
-                        modifier = Modifier.testTag("update_download_status_text")
-                    )
-                }
-                if (needsInstallPermission) {
-                    Text(
-                        text = "Download complete. Allow 'Install unknown apps' for 1 Crore once in Settings so Android can install this update.",
-                        style = MaterialTheme.typography.bodyMedium,
+                        text = "Version ${update.versionName} is available",
+                        style = MaterialTheme.typography.titleLarge,
                         color = palette.onCard,
-                        modifier = Modifier.testTag("update_install_permission_notice")
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.testTag("update_dialog_title")
                     )
-                }
-                if (errorMessage != null) {
-                    Surface(
-                        color = palette.subtleSurface,
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, palette.error, RoundedCornerShape(8.dp))
-                    ) {
+                    if (update.changelog.isNotBlank()) {
                         Text(
-                            text = errorMessage,
+                            text = update.changelog,
                             style = MaterialTheme.typography.bodyMedium,
                             color = palette.onCard,
+                            modifier = Modifier.testTag("update_dialog_changelog")
+                        )
+                    }
+                    if (update.isForced) {
+                        Text(
+                            text = "This update contains a critical data-safety or bug fix and is required to continue.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = palette.onCardSubtext,
+                            modifier = Modifier.testTag("update_dialog_forced_notice")
+                        )
+                    }
+                    if (isPreparing || isDownloading) {
+                        if (downloadProgress != null && isDownloading) {
+                            LinearProgressIndicator(
+                                progress = { downloadProgress },
+                                color = palette.accent,
+                                trackColor = palette.track,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("update_download_progress_bar")
+                            )
+                        } else {
+                            LinearProgressIndicator(
+                                color = palette.accent,
+                                trackColor = palette.track,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("update_download_progress_bar")
+                            )
+                        }
+                        Text(
+                            text = downloadStatusText ?: if (isPreparing) {
+                                "Syncing your counts to cloud before updating..."
+                            } else {
+                                "Downloading update..."
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = palette.onCardSubtext,
+                            modifier = Modifier.testTag("update_download_status_text")
+                        )
+                    }
+                    if (needsInstallPermission) {
+                        Text(
+                            text = "Download complete. Allow 'Install unknown apps' for 1 Crore once in Settings so Android can install this update.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = palette.onCard,
+                            modifier = Modifier.testTag("update_install_permission_notice")
+                        )
+                    }
+                    if (errorMessage != null) {
+                        Surface(
+                            color = palette.subtleSurface,
+                            shape = RoundedCornerShape(8.dp),
                             modifier = Modifier
-                                .padding(10.dp)
-                                .testTag("update_error_banner")
+                                .fillMaxWidth()
+                                .border(1.dp, palette.error, RoundedCornerShape(8.dp))
+                        ) {
+                            Text(
+                                text = errorMessage,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = palette.onCard,
+                                modifier = Modifier
+                                    .padding(10.dp)
+                                    .testTag("update_error_banner")
+                            )
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (!update.isForced) {
+                            if (isDownloading) {
+                                TextButton(
+                                    onClick = onCancelDownload,
+                                    modifier = Modifier.testTag("update_cancel_download_button")
+                                ) {
+                                    Text("Cancel", color = palette.onCardSubtext)
+                                }
+                            } else {
+                                TextButton(
+                                    onClick = onDismiss,
+                                    enabled = !isPreparing,
+                                    modifier = Modifier.testTag("update_later_button")
+                                ) {
+                                    Text("Later", color = palette.onCardSubtext)
+                                }
+                            }
+                        }
+                        val actionLabel = when {
+                            isPreparing -> "Syncing..."
+                            isDownloading -> "Downloading..."
+                            needsInstallPermission -> "Allow & Install"
+                            pendingInstallReady -> "Install now"
+                            else -> "Update now"
+                        }
+                        BlackPillButton(
+                            text = actionLabel,
+                            enabled = !busy,
+                            onClick = onUpdateNow,
+                            modifier = Modifier.testTag("update_now_button")
                         )
                     }
                 }
             }
-        },
-        confirmButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (!update.isForced) {
-                    if (isDownloading) {
-                        TextButton(
-                            onClick = onCancelDownload,
-                            modifier = Modifier.testTag("update_cancel_download_button")
-                        ) {
-                            Text("Cancel", color = palette.onCardSubtext)
-                        }
-                    } else {
-                        TextButton(
-                            onClick = onDismiss,
-                            enabled = !isPreparing,
-                            modifier = Modifier.testTag("update_later_button")
-                        ) {
-                            Text("Later", color = palette.onCardSubtext)
-                        }
-                    }
-                }
-                val actionLabel = when {
-                    isPreparing -> "Syncing..."
-                    isDownloading -> "Downloading..."
-                    needsInstallPermission -> "Allow & Install"
-                    pendingInstallReady -> "Install now"
-                    else -> "Update now"
-                }
-                BlackPillButton(
-                    text = actionLabel,
-                    enabled = !busy,
-                    onClick = onUpdateNow,
-                    modifier = Modifier.testTag("update_now_button")
-                )
-            }
         }
-    )
+    }
 }
 
 @Composable
