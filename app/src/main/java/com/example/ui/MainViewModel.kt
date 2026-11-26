@@ -2750,6 +2750,6 @@ class MainViewModel(
         const val BATCH_SYNC_TAP_THRESHOLD = 100
         const val AUTO_SYNC_INTERVAL_MILLIS = 5L * 60L * 1000L
         const val GROUP_FLUSH_DEBOUNCE_MILLIS = 1_500L
-        const val INITIAL_CLOUD_SYNC_TIMEOUT_MS = 6_000L
+        const val INITIAL_CLOUD_SYNC_TIMEOUT_MS = 2_000L
     }
 }

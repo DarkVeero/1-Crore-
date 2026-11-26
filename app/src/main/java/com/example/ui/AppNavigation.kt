@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.History
@@ -27,6 +28,7 @@ import androidx.compose.material.icons.outlined.RadioButtonChecked
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -58,6 +60,7 @@ import androidx.compose.ui.graphics.vector.PathNode
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.credentials.CredentialManager
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -182,6 +185,34 @@ internal enum class AppTab(
     HISTORY("history", "History", Icons.Filled.History, Icons.Outlined.History),
     STATS("stats", "Stats", Icons.Filled.BarChart, Icons.Outlined.BarChart),
     SETTINGS("settings", "Settings", TaperIcon, TaperIcon)
+}
+
+// Settings tab icon: the ACTUAL ⌬ glyph (U+2332) rendered as text, so it reads as
+// the symbol the owner typed. The traced TaperIcon outline read as a paper plane
+// because its bar vanished at 24dp. 28.sp in a 24.dp box: the glyph ink matches
+// the other 24.dp tab icons (hollow triangle + clearly visible bar).
+// TaperIcon is kept only to satisfy AppTab's ImageVector fields; it is not drawn.
+@Composable
+private fun TabIcon(tab: AppTab, selected: Boolean) {
+    if (tab == AppTab.SETTINGS) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.size(24.dp)
+        ) {
+            Text(
+                text = "\u2332",
+                fontSize = 28.sp,
+                lineHeight = 24.sp,
+                color = LocalContentColor.current,
+                maxLines = 1
+            )
+        }
+    } else {
+        Icon(
+            imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
+            contentDescription = tab.label
+        )
+    }
 }
 
 @Composable
@@ -632,10 +663,7 @@ internal fun MainTabScaffold(
                                     selected = selected,
                                     onClick = { navigateToTab(tab.route) },
                                     icon = {
-                                        Icon(
-                                            imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
-                                            contentDescription = tab.label
-                                        )
+                                        TabIcon(tab = tab, selected = selected)
                                     },
                                     label = {
                                         Text(
@@ -677,10 +705,7 @@ internal fun MainTabScaffold(
                                 selected = selected,
                                 onClick = { navigateToTab(tab.route) },
                                 icon = {
-                                    Icon(
-                                        imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
-                                        contentDescription = tab.label
-                                    )
+                                    TabIcon(tab = tab, selected = selected)
                                 },
                                 label = {
                                     Text(

@@ -569,8 +569,10 @@ private fun V11AnimatedLogoTile(
             .testTag("one_crore_logo_canvas")
     ) {
         if (showStaticFinal) {
+            // Single clean logo, no ring: the pre-composited tile (same artwork as the
+            // animated branch, ring removed per owner 26 Nov).
             Image(
-                painter = painterResource(id = R.drawable.ic_logo_v11_full),
+                painter = painterResource(id = R.drawable.ic_logo_v11_tile_clean),
                 contentDescription = "1 Crore v11 logo",
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
@@ -613,8 +615,10 @@ private fun V11AnimatedLogoTile(
                     .testTag("splash_logo_body_tasbeeh")
             )
 
-            // ONLY the white arc/ring draws clockwise from 12 o'clock to 270 degrees and stops (gap at top-left)
-            val sweepDeg = SplashIntroSpec.ringSweepDegrees(ringT)
+            // Ring REMOVED per owner 26 Nov: the splash shows one clean logo, no white
+            // arc ever draws. The ring node stays mounted (frame-0 logo-layer tests
+            // assert it) but its sweep is forced to 0 so nothing is drawn.
+            val sweepDeg = 0f
             Image(
                 painter = painterResource(id = R.drawable.ic_logo_v11_ring),
                 contentDescription = null,

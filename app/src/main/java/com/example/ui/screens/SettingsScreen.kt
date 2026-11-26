@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -78,10 +77,6 @@ import com.example.ui.components.formatPendingSyncSummary
 import com.example.ui.components.formatSyncTime
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
 import com.example.ui.theme.AppThemeColors
 import com.example.ui.theme.AppThemeMode
 import com.example.ui.theme.appOutlinedTextFieldColors
@@ -279,14 +274,6 @@ fun SettingsScreen(
                     subtitle = "${formatNumber(uiState.dailyTarget.toLong())} / day (≈ ${String.format(Locale.US, "%.1f", yrs)} years)",
                     onClick = { showPlanDialog = true },
                     testTag = "settings_change_plan"
-                )
-            }
-
-            // Theme Choice
-            SettingsSectionCard(title = "THEME") {
-                ThemeModeSelectorRow(
-                    selectedMode = uiState.themeMode,
-                    onSelectMode = onUpdateThemeMode
                 )
             }
 
@@ -972,73 +959,6 @@ private fun ChangePasswordDialog(
             }
         }
     )
-}
-
-@Composable
-private fun ThemeModeSelectorRow(
-    selectedMode: AppThemeMode,
-    onSelectMode: (AppThemeMode) -> Unit
-) {
-    val palette = AppThemeColors.palette
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(
-                text = "App Theme",
-                style = MaterialTheme.typography.titleMedium,
-                color = palette.onCard
-            )
-            Text(
-                text = "Active: ${selectedMode.displayLabel}",
-                style = MaterialTheme.typography.labelMedium,
-                color = palette.onCardSubtext
-            )
-        }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(palette.subtleSurface, RoundedCornerShape(12.dp))
-                .border(1.dp, palette.hairline, RoundedCornerShape(12.dp))
-                .padding(4.dp)
-                .testTag("settings_theme_selector"),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            AppThemeMode.entries.filter { it != AppThemeMode.RED }.forEach { mode ->
-                val isSelected = selectedMode == mode
-                val tag = when (mode) {
-                    AppThemeMode.BLACK_AND_WHITE -> "settings_theme_bw_option"
-                    AppThemeMode.RED -> "settings_theme_red_option"
-                }
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .weight(1f)
-                        .defaultMinSize(minHeight = 48.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (isSelected) palette.accent else Color.Transparent)
-                        .clickable { onSelectMode(mode) }
-                        .semantics {
-                            role = Role.RadioButton
-                            selected = isSelected
-                        }
-                        .testTag(tag)
-                        .padding(horizontal = 12.dp, vertical = 10.dp)
-                ) {
-                    Text(
-                        text = mode.displayLabel,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = if (isSelected) palette.onAccent else palette.onCard,
-                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                        maxLines = 1
-                    )
-                }
-            }
-        }
-    }
 }
 
 @Composable
