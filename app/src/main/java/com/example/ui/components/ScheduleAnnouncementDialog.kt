@@ -98,6 +98,7 @@ fun ScheduleAnnouncementDialog(
     var selectedDate by remember { mutableStateOf(initialNow.toLocalDate()) }
     var selectedHour by remember { mutableIntStateOf(initialNow.hour) }
     var selectedMinute by remember { mutableIntStateOf(initialNow.minute) }
+    var durationDaysInput by remember { mutableStateOf("") }
 
     var isUrgent by remember { mutableStateOf(false) }
 
@@ -507,6 +508,21 @@ fun ScheduleAnnouncementDialog(
                     )
                 }
 
+                OutlinedTextField(
+                    value = durationDaysInput,
+                    onValueChange = { raw ->
+                        durationDaysInput = raw.filter { it.isDigit() }.take(3)
+                        validationError = null
+                    },
+                    label = { Text("Duration in days (default 7)") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    colors = appOutlinedTextFieldColors(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("schedule_announcement_duration_days_input")
+                )
+
                 if (validationError != null) {
                     Text(
                         text = validationError.orEmpty(),
@@ -578,6 +594,8 @@ fun ScheduleAnnouncementDialog(
                                 0L
                             }
 
+                            val durationDays = durationDaysInput.toIntOrNull()?.coerceAtLeast(1) ?: 7
+
                             val item = buildAnnouncementItemFromForm(
                                 title = cleanTitle,
                                 body = cleanBody,
@@ -589,7 +607,8 @@ fun ScheduleAnnouncementDialog(
                                 inactiveDaysThreshold = inactiveDays,
                                 scheduledAtMillis = scheduledMillis,
                                 isUrgent = isUrgent,
-                                nowMillis = nowMillis
+                                nowMillis = nowMillis,
+                                durationDays = durationDays
                             )
                             onSchedule(item)
                         },
@@ -761,7 +780,8 @@ internal fun buildAnnouncementItemFromForm(
     inactiveDaysThreshold: Int,
     scheduledAtMillis: Long,
     isUrgent: Boolean = false,
-    nowMillis: Long = System.currentTimeMillis()
+    nowMillis: Long = System.currentTimeMillis(),
+    durationDays: Int = 7
 ): AnnouncementItem {
     val cleanTitle = title.trim()
     val cleanBody = body.trim()
@@ -780,7 +800,7 @@ internal fun buildAnnouncementItemFromForm(
         buttonAction = if (isLinkType && isValidHttpUrl(cleanLink)) AnnouncementAction.LINK else AnnouncementAction.NONE,
         buttonUrl = if (isLinkType && isValidHttpUrl(cleanLink)) cleanLink else null,
         startAtMillis = effectiveStart,
-        endAtMillis = effectiveStart + 7L * AnnouncementItem.ONE_DAY_MILLIS,
+        endAtMillis = effectiveStart + durationDays.toLong().coerceAtLeast(1) * AnnouncementItem.ONE_DAY_MILLIS,
         maxShowsPerDay = AnnouncementFrequencyStore.configuredMaxShowsPerDay,
         maxShowsPerWeek = AnnouncementItem.DEFAULT_MAX_SHOWS_PER_WEEK,
         priority = if (isUrgent) 100 else 10,
