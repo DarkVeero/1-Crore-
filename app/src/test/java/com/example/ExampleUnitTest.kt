@@ -792,14 +792,15 @@ class ExampleUnitTest {
 
         // APK magic-byte header validation (rejects empty, small, or HTML error pages; accepts valid PK zip/APK header)
         val tempDir = java.nio.file.Files.createTempDirectory("apk_validation_test").toFile()
+        val context: android.content.Context = androidx.test.core.app.ApplicationProvider.getApplicationContext()
         try {
             val missingFile = java.io.File(tempDir, "missing.apk")
-            assertEquals(false, com.example.update.AppUpdateManager.isValidApkFile(missingFile))
+            assertEquals(false, com.example.update.AppUpdateManager.isValidApkFile(context, missingFile))
 
             val htmlFile = java.io.File(tempDir, "error_page.apk").apply {
                 writeText("<!DOCTYPE html><html><body>Quota exceeded</body></html>".repeat(40))
             }
-            assertEquals(false, com.example.update.AppUpdateManager.isValidApkFile(htmlFile))
+            assertEquals(false, com.example.update.AppUpdateManager.isValidApkFile(context, htmlFile))
 
             val validApkFile = java.io.File(tempDir, "valid_1crore.apk").apply {
                 val bytes = ByteArray(2048)
@@ -807,7 +808,7 @@ class ExampleUnitTest {
                 bytes[1] = 0x4B.toByte() // 'K'
                 writeBytes(bytes)
             }
-            assertTrue(com.example.update.AppUpdateManager.isValidApkFile(validApkFile))
+            assertTrue(com.example.update.AppUpdateManager.isValidApkFile(context, validApkFile))
         } finally {
             tempDir.deleteRecursively()
         }

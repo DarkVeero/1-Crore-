@@ -3526,7 +3526,8 @@ class ExampleRobolectricTest {
                     !showMessagesHistoryScreen -> {
                         com.example.ui.screens.HistoryScreen(
                             uiState = MainUiState(isLoading = false, announcementHistory = historyNewestFirst),
-                            onEditDayCount = { _, _ -> },
+                            historyDays = emptyList(),
+                            onEditDayCount = { _, _, _ -> },
                             onOpenMessagesHistory = { showMessagesHistoryScreen = true }
                         )
                     }
@@ -5924,7 +5925,7 @@ class ExampleRobolectricTest {
                 org.robolectric.shadows.ShadowLooper.idleMainLooper()
 
                 // User reduces yesterday's count via History edit to 1,021 -> current total is 1,071 (50 + 1,021)
-                vm.onEditDayCount(yesterdayKey, 1_021L)
+                vm.onEditDayCount(yesterdayKey, 1_021L, 5_000_000L)
                 val dropDeadline = System.currentTimeMillis() + 3_000L
                 while ((latestState?.totalCount ?: 0L) != 1_071L && System.currentTimeMillis() < dropDeadline) {
                     org.robolectric.shadows.ShadowLooper.idleMainLooper()

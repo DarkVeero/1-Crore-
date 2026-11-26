@@ -246,7 +246,6 @@ fun SplashScreen(
         }
         if (SplashIntroSpec.shouldUseStaticSplashLogo(reduceMotion, isLowRam)) {
             SplashIntroSpec.recordSplashHistory(listOf(SplashIntroStage.COMPLETE), wasStatic = true)
-            delay(SplashIntroSpec.REDUCE_MOTION_HOLD_MS)
             SplashSessionGuard.markPlayed()
             onFinished()
             return@LaunchedEffect
@@ -256,7 +255,7 @@ fun SplashScreen(
             elapsedMs.animateTo(
                 targetValue = SplashIntroSpec.TOTAL_INTRO_DURATION_MS.toFloat(),
                 animationSpec = tween(
-                    durationMillis = SplashIntroSpec.TOTAL_INTRO_DURATION_MS,
+                    durationMillis = SplashIntroSpec.TOTAL_INTRO_DURATION_MS, delayMillis = 100,
                     easing = LinearEasing
                 )
             )
