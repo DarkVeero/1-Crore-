@@ -58,6 +58,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.time.Duration
 import java.time.Instant
@@ -570,6 +571,9 @@ class MainViewModel(
         refreshGlobalStats()
         loadInitialUserSession()
         reloadUserGroupsAndCelebrations()
+        viewModelScope.launch {
+            restoreDownloadedUpdateIfAvailable()
+        }
 
         // Hourly background ticker while app remains open: refreshes global stats once >= 1 hour elapses
         viewModelScope.launch {
@@ -1789,6 +1793,43 @@ class MainViewModel(
         }
     }
 
+    private suspend fun restoreDownloadedUpdateIfAvailable(targetUpdate: AppUpdateInfo? = null) {
+        if (updateStateFlow.value.isDownloading || updateStateFlow.value.isPreparingUpdate) return
+        val update = targetUpdate ?: AppUpdateManager.getCachedAvailableUpdate(appContext)
+        if (update == null) {
+            if (downloadedApkFile != null || updateStateFlow.value.pendingInstallReady) {
+                activeDownloadId = null
+                downloadedApkFile = null
+                updateStateFlow.value = updateStateFlow.value.copy(
+                    needsInstallPermission = false,
+                    pendingInstallReady = false
+                )
+            }
+            return
+        }
+        val completed = AppUpdateManager.findCompletedDownload(appContext, update.versionCode)
+        if (completed != null) {
+            val (downloadId, apkFile) = completed
+            activeDownloadId = downloadId
+            downloadedApkFile = apkFile
+            val canInstall = AppUpdateManager.canInstallPackages(appContext)
+            updateStateFlow.value = updateStateFlow.value.copy(
+                availableUpdate = updateStateFlow.value.availableUpdate ?: update,
+                needsInstallPermission = !canInstall,
+                pendingInstallReady = true,
+                downloadStatusText = "Download complete",
+                errorMessage = null
+            )
+        } else if (downloadedApkFile != null || updateStateFlow.value.pendingInstallReady) {
+            activeDownloadId = null
+            downloadedApkFile = null
+            updateStateFlow.value = updateStateFlow.value.copy(
+                needsInstallPermission = false,
+                pendingInstallReady = false
+            )
+        }
+    }
+
     fun checkForAppUpdate() {
         viewModelScope.launch {
             val settleWatchdog = launch {
@@ -1806,6 +1847,7 @@ class MainViewModel(
                         showDialog = updateStateFlow.value.showDialog || autoShow,
                         isCheckSettled = true
                     )
+                    restoreDownloadedUpdateIfAvailable(cached)
                     settleWatchdog.cancel()
                 }
 
@@ -1815,6 +1857,8 @@ class MainViewModel(
 
                 val latest = AppUpdateManager.checkForUpdate(appContext)
                 if (latest == null) {
+                    activeDownloadId = null
+                    downloadedApkFile = null
                     updateStateFlow.value = UpdateUiState(isCheckSettled = true)
                 } else {
                     val autoShow = AppUpdateManager.shouldAutoShowDialog(appContext, latest)
@@ -1823,6 +1867,7 @@ class MainViewModel(
                         showDialog = updateStateFlow.value.showDialog || autoShow,
                         isCheckSettled = true
                     )
+                    restoreDownloadedUpdateIfAvailable(latest)
                 }
             } finally {
                 settleWatchdog.cancel()
@@ -1889,12 +1934,23 @@ class MainViewModel(
                 pendingInstallReady = true,
                 errorMessage = null
             )
-            triggerSync(silent = true)
-        val launched = AppUpdateManager.launchApkInstaller(appContext, apkFile)
-            if (!launched) {
-                updateStateFlow.value = updateStateFlow.value.copy(
-                    errorMessage = "Could not open the Android installer for the downloaded APK."
-                )
+            viewModelScope.launch {
+                if (NetworkMonitor.isCurrentlyOnline(appContext)) {
+                    isSyncingFlow.value = true
+                    try {
+                        withTimeoutOrNull(5_000L) {
+                            runCatching { repository.syncWithCloud() }
+                        }
+                    } finally {
+                        isSyncingFlow.value = false
+                    }
+                }
+                val launched = AppUpdateManager.launchApkInstaller(appContext, apkFile)
+                if (!launched) {
+                    updateStateFlow.value = updateStateFlow.value.copy(
+                        errorMessage = "Could not open the Android installer for the downloaded APK."
+                    )
+                }
             }
         }
     }
@@ -1938,8 +1994,11 @@ class MainViewModel(
             // Mandatory pre-install Firestore batch sync before starting download/install
             if (NetworkMonitor.isCurrentlyOnline(appContext)) {
                 isSyncingFlow.value = true
-                repository.syncWithCloud()
-                isSyncingFlow.value = false
+                try {
+                    withTimeoutOrNull(10_000L) { repository.syncWithCloud() }
+                } finally {
+                    isSyncingFlow.value = false
+                }
             }
 
             updateStateFlow.value = updateStateFlow.value.copy(
@@ -1975,7 +2034,7 @@ class MainViewModel(
                             errorMessage = null
                         )
                         // Sync once more before the installer opens, so the latest counts are on the server before the update restarts the app. A failed sync must never block the installer.
-            runCatching { repository.syncWithCloud() }
+            withTimeoutOrNull(5_000L) { runCatching { repository.syncWithCloud() } }
             val launched = AppUpdateManager.launchApkInstaller(appContext, downloadState.apkFile)
                         if (!launched) {
                             updateStateFlow.value = updateStateFlow.value.copy(

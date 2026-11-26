@@ -5,6 +5,7 @@ import android.content.ClipData
 import android.content.ClipDescription
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -879,6 +880,55 @@ object AppUpdateManager {
         }
     }
 
+    suspend fun findCompletedDownload(
+        context: Context,
+        expectedVersionCode: Int? = null
+    ): Pair<Long, File>? = withContext(Dispatchers.IO) {
+        val appContext = context.applicationContext
+        val dm = appContext.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager ?: return@withContext null
+        val persistedId = appContext.updatePrefs.data.first()[KEY_PENDING_DOWNLOAD_ID] ?: return@withContext null
+        if (persistedId <= 0L) return@withContext null
+
+        var status = -1
+        var localUri: String? = null
+        dm.query(DownloadManager.Query().setFilterById(persistedId))?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+                val uriIndex = cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI)
+                if (uriIndex >= 0) {
+                    localUri = cursor.getString(uriIndex)
+                }
+            }
+        }
+        if (status != DownloadManager.STATUS_SUCCESSFUL) return@withContext null
+
+        val downloadsDir = appContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: return@withContext null
+        val candidateFile = if (expectedVersionCode != null) {
+            File(downloadsDir, "1crore-update-$expectedVersionCode.apk")
+        } else {
+            val uriPath = localUri?.let { runCatching { Uri.parse(it).path }.getOrNull() }
+            val uriFile = uriPath?.let { File(it) }
+            if (uriFile != null && uriFile.name.startsWith("1crore-update-") && uriFile.name.endsWith(".apk")) {
+                uriFile
+            } else {
+                downloadsDir.listFiles()
+                    ?.filter { it.name.startsWith("1crore-update-") && it.name.endsWith(".apk") }
+                    ?.maxByOrNull { it.lastModified() }
+            }
+        } ?: return@withContext null
+
+        if (!candidateFile.exists() || candidateFile.length() == 0L || !isValidApkFile(appContext, candidateFile)) {
+            if (expectedVersionCode != null) {
+                runCatching { if (candidateFile.exists()) candidateFile.delete() }
+                runCatching { dm.remove(persistedId) }
+                appContext.updatePrefs.edit { it.remove(KEY_PENDING_DOWNLOAD_ID) }
+            }
+            return@withContext null
+        }
+
+        persistedId to candidateFile
+    }
+
     private suspend fun findResumableDownloadId(context: Context): Long {
         val dm = context.applicationContext.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager ?: return -1L
         val persistedId = context.applicationContext.updatePrefs.data.first()[KEY_PENDING_DOWNLOAD_ID] ?: return -1L
@@ -915,6 +965,17 @@ object AppUpdateManager {
 
         val fileName = "1crore-update-${update.versionCode}.apk"
         val destFile = File(downloadsDir, fileName)
+        val completedDownload = findCompletedDownload(appContext, update.versionCode)
+        if (completedDownload != null) {
+            val (_, existingFile) = completedDownload
+            if (canInstallPackages(appContext)) {
+                emit(ApkDownloadState.ReadyToInstall(existingFile))
+            } else {
+                emit(ApkDownloadState.NeedsInstallPermission(existingFile))
+            }
+            return@flow
+        }
+
         val resumedId = findResumableDownloadId(appContext)
         if (resumedId < 0L && destFile.exists()) {
             destFile.delete()
@@ -983,9 +1044,10 @@ emit(ApkDownloadState.Downloading(downloadId, bytesDownloaded = 0L, totalBytes =
                 when (status) {
                     DownloadManager.STATUS_SUCCESSFUL -> {
                         finishedNormally = true
-                        if (!destFile.exists() || destFile.length() == 0L || !isValidApkFile(destFile)) {
+                        if (!destFile.exists() || destFile.length() == 0L || !isValidApkFile(appContext, destFile)) {
                             runCatching { destFile.delete() }
                             runCatching { dm.remove(downloadId) }
+                            appContext.updatePrefs.edit { it.remove(KEY_PENDING_DOWNLOAD_ID) }
                             emit(
                                 ApkDownloadState.Failed(
                                     "Downloaded file is not a valid APK package. Check the release APK URL."
@@ -1120,13 +1182,27 @@ emit(ApkDownloadState.Downloading(downloadId, bytesDownloaded, totalBytes))
         }
     }
 
-    internal fun isValidApkFile(file: File): Boolean {
+    internal fun isValidApkFile(context: Context, file: File): Boolean {
         return try {
             if (!file.exists() || file.length() < 4L) return false
-            FileInputStream(file).use { input ->
+            val hasValidManifestZip = FileInputStream(file).use { input ->
                 val header = ByteArray(2)
-                input.read(header) == 2 && header[0] == 0x50.toByte() && header[1] == 0x4B.toByte()
+                input.read(header) == 2 &&
+                    header[0] == 0x50.toByte() &&
+                    header[1] == 0x4B.toByte() &&
+                    java.util.zip.ZipFile(file).use { it.getEntry("AndroidManifest.xml") != null }
             }
+            if (!hasValidManifestZip) return false
+            val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageArchiveInfo(
+                    file.absolutePath,
+                    PackageManager.PackageInfoFlags.of(0L)
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageArchiveInfo(file.absolutePath, 0)
+            }
+            packageInfo != null
         } catch (_: Exception) {
             false
         }
