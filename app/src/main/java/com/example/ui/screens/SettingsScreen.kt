@@ -471,14 +471,14 @@ fun SettingsScreen(
             SettingsSectionCard(title = "ACCOUNT") {
             Text(text = "Signed in as: $effectiveEmail", style = MaterialTheme.typography.bodyMedium, color = palette.onCardSubtext, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
             if (!hasPasswordLinked) Text(text = "Google account — signed in with Google", style = MaterialTheme.typography.bodyMedium, color = palette.onCardSubtext, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-                if (hasPasswordLinked) {
-                    SettingsActionRow(
-                        title = "Change Password",
-                        subtitle = "Re-authenticate and update your password",
-                        onClick = { showChangePasswordDialog = true },
-                        testTag = "settings_change_password_row"
-                    )
-                } else {
+                SettingsActionRow(
+                    title = "Change Password",
+                    subtitle = if (hasPasswordLinked) "Re-authenticate and update your password" else "Set a password for your account",
+                    onClick = { showChangePasswordDialog = true },
+                    testTag = "settings_change_password_row"
+                )
+                if (!hasPasswordLinked) {
+                    HorizontalDivider(color = palette.hairline)
                     SettingsActionRow(
                         title = "Set Backup Password",
                         subtitle = "Link a password to sign in with email if Google is lost",
@@ -580,8 +580,10 @@ fun SettingsScreen(
     if (showChangePasswordDialog) {
         ChangePasswordDialog(
             onDismiss = { showChangePasswordDialog = false },
-                userEmail = effectiveEmail,
+            userEmail = effectiveEmail,
+            isGoogleOnly = !hasPasswordLinked,
             onPasswordChanged = {
+                hasPasswordLinked = true
                 showChangePasswordDialog = false
                 localNotice = "Password updated successfully."
             }
@@ -836,6 +838,7 @@ private fun ChangePasswordDialog(
     onDismiss: () -> Unit,
     onPasswordChanged: () -> Unit,
     userEmail: String? = null,
+    isGoogleOnly: Boolean = false,
 ) {
     val palette = AppThemeColors.palette
     val scope = rememberCoroutineScope()
@@ -851,7 +854,7 @@ private fun ChangePasswordDialog(
         shape = RoundedCornerShape(16.dp),
         title = {
             Text(
-                text = "Change Password",
+                text = if (isGoogleOnly) "Set Password" else "Change Password",
                 style = MaterialTheme.typography.titleLarge,
                 color = palette.onCard
             )
@@ -859,21 +862,23 @@ private fun ChangePasswordDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(text = "Signed in as: ${userEmail.orEmpty()}", style = MaterialTheme.typography.bodyMedium, color = palette.onCardSubtext)
-                OutlinedTextField(
-                    value = currentPassword,
-                    onValueChange = {
-                        currentPassword = it
-                        dialogError = null
-                    },
-                    label = { Text("Current Password") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    colors = appOutlinedTextFieldColors(),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("change_password_current_input")
-                )
+                if (!isGoogleOnly) {
+                    OutlinedTextField(
+                        value = currentPassword,
+                        onValueChange = {
+                            currentPassword = it
+                            dialogError = null
+                        },
+                        label = { Text("Current Password") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        colors = appOutlinedTextFieldColors(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("change_password_current_input")
+                    )
+                }
                 OutlinedTextField(
                     value = newPassword,
                     onValueChange = {
@@ -920,10 +925,10 @@ private fun ChangePasswordDialog(
                     Text("Cancel", color = palette.onCardSubtext)
                 }
                 BlackPillButton(
-                    text = if (isSaving) "Updating..." else "Update",
+                    text = if (isSaving) (if (isGoogleOnly) "Setting..." else "Updating...") else (if (isGoogleOnly) "Set Password" else "Update"),
                     enabled = !isSaving,
                     onClick = {
-                        if (currentPassword.isEmpty()) {
+                        if (!isGoogleOnly && currentPassword.isEmpty()) {
                             dialogError = "Please enter your current password."
                             return@BlackPillButton
                         }
@@ -945,9 +950,15 @@ private fun ChangePasswordDialog(
                         dialogError = null
                         scope.launch {
                             try {
-                                val credential = EmailAuthProvider.getCredential(email, currentPassword)
-                                user.reauthenticate(credential).await()
-                                user.updatePassword(newPassword).await()
+                                if (isGoogleOnly) {
+                                    val credential = EmailAuthProvider.getCredential(email, newPassword)
+                                    user.linkWithCredential(credential).await()
+                                    user.reload().await()
+                                } else {
+                                    val credential = EmailAuthProvider.getCredential(email, currentPassword)
+                                    user.reauthenticate(credential).await()
+                                    user.updatePassword(newPassword).await()
+                                }
                                 isSaving = false
                                 onPasswordChanged()
                             } catch (e: Exception) {
