@@ -13,8 +13,12 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.example.data.DuroodRepository
 import com.google.firebase.Firebase
+import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.auth
+import com.google.firebase.firestore.FirebaseFirestoreException
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 
 class SyncWorker(
     appContext: Context,
@@ -24,11 +28,49 @@ class SyncWorker(
     override suspend fun doWork(): Result {
         val currentUser = Firebase.auth.currentUser ?: return Result.success()
         val repository = DuroodRepository(applicationContext)
-        val syncResult = repository.syncWithCloud()
-        val groupFlushResult = runCatching {
-            com.example.groups.GroupRepository.flushDirtyGroupsToCloud(applicationContext, currentUser.uid)
+
+        val syncResult: kotlin.Result<Unit> = runCatching {
+            withTimeoutOrNull(DuroodRepository.CLOUD_SYNC_TIMEOUT_MS) {
+                repository.syncWithCloud().getOrThrow()
+            } ?: throw TimeoutException("SyncWorker syncWithCloud timed out")
         }
-        return if (syncResult.isSuccess && groupFlushResult.isSuccess) Result.success() else Result.retry()
+
+        val groupFlushResult: kotlin.Result<Unit> = runCatching {
+            withTimeoutOrNull(DuroodRepository.CLOUD_SYNC_TIMEOUT_MS) {
+                com.example.groups.GroupRepository.flushDirtyGroupsToCloud(applicationContext, currentUser.uid)
+            } ?: throw TimeoutException("SyncWorker flushDirtyGroups timed out")
+        }
+
+        val syncError = syncResult.exceptionOrNull()
+        val groupError = groupFlushResult.exceptionOrNull()
+
+        if (isPermanentFailure(syncError) || isPermanentFailure(groupError)) {
+            return Result.failure()
+        }
+
+        return if (syncResult.isSuccess && groupFlushResult.isSuccess) {
+            Result.success()
+        } else {
+            Result.retry()
+        }
+    }
+
+    private fun isPermanentFailure(throwable: Throwable?): Boolean {
+        if (throwable == null) return false
+        val causes = generateSequence(throwable) { it.cause }
+        for (cause in causes) {
+            if (cause is FirebaseFirestoreException) {
+                if (cause.code == FirebaseFirestoreException.Code.PERMISSION_DENIED ||
+                    cause.code == FirebaseFirestoreException.Code.UNAUTHENTICATED
+                ) {
+                    return true
+                }
+            }
+            if (cause is FirebaseAuthException) {
+                return true
+            }
+        }
+        return false
     }
 
     companion object {

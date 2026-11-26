@@ -61,6 +61,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
+import java.util.concurrent.TimeoutException
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -242,6 +243,8 @@ class MainViewModel(
     private val currentDateFlow = MutableStateFlow(LocalDate.now())
     private val isSyncingFlow = MutableStateFlow(false)
     private val syncInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
+    private var syncJob: Job? = null
+    private var syncStartedAtMillis: Long = 0L
     private val statusMessageFlow = MutableStateFlow<String?>(null)
     private val initializedFlow = MutableStateFlow(false)
     private val initialLoadOfflineErrorFlow = MutableStateFlow(false)
@@ -1020,54 +1023,82 @@ class MainViewModel(
     fun triggerSync(silent: Boolean = false) {
         unsyncedTapCount = 0
         WidgetAndFloatingBridge.resetUnsyncedTapCount(appContext)
-        if (isSyncingFlow.value) return
-        if (!syncInFlight.compareAndSet(false, true)) return
-        viewModelScope.launch {
-            if (!NetworkMonitor.isCurrentlyOnline(appContext)) {
-                SyncWorker.enqueueWhenOnline(appContext)
-                if (!silent) {
-                    statusMessageFlow.value = "Offline — saved on phone, will sync when internet returns."
-                }
-                return@launch
-            }
-            val hadPendingSyncBefore = repository.getProfileOnce(currentUserId)?.pendingSync == true
-            isSyncingFlow.value = true
-            val result = try {
-            repository.syncWithCloud()
-        } finally {
-            isSyncingFlow.value = false
+
+        val now = System.currentTimeMillis()
+        val currentJob = syncJob
+        val isReallyActive = currentJob?.isActive == true
+
+        if (!silent) {
+            // Manual sync from Settings → DATA & BACKUP: must never be blocked by a stale flag
+            if (isReallyActive && (now - syncStartedAtMillis > DuroodRepository.CLOUD_SYNC_TIMEOUT_MS + 2_000L)) {
+                currentJob?.cancel()
                 syncInFlight.set(false)
+                isSyncingFlow.value = false
+            } else if (isReallyActive) {
+                return
+            } else {
+                syncInFlight.set(false)
+                isSyncingFlow.value = false
+            }
+        } else {
+            // Automated / silent sync: return if already active or syncing
+            if (isReallyActive || isSyncingFlow.value) return
+            if (syncInFlight.get() && (now - syncStartedAtMillis > DuroodRepository.CLOUD_SYNC_TIMEOUT_MS + 2_000L)) {
+                syncInFlight.set(false)
+            }
+            if (!syncInFlight.compareAndSet(false, true)) return
         }
-             
-            if (result.isSuccess) {
-                val profile = repository.getProfileOnce(currentUserId)
-                if (profile != null && !hadPendingSyncBefore && !profile.pendingSync) {
-                    ThemePreferenceStore.setThemeMode(
-                        appContext,
-                        AppThemeMode.fromStorageKey(profile.themeMode)
-                    )
+
+        syncInFlight.set(true)
+        syncStartedAtMillis = now
+        syncJob = viewModelScope.launch {
+            try {
+                if (!NetworkMonitor.isCurrentlyOnline(appContext)) {
+                    SyncWorker.enqueueWhenOnline(appContext)
+                    if (!silent) {
+                        statusMessageFlow.value = "Offline — saved on phone, will sync when internet returns."
+                    }
+                    return@launch
                 }
-                if (profile != null && profile.setupCompleted) {
-                    ReminderScheduler.scheduleReminders(
-                        context = appContext,
-                        enabled = profile.remindersEnabled,
-                        r1Hour = profile.reminder1Hour,
-                        r1Minute = profile.reminder1Minute,
-                        r2Hour = profile.reminder2Hour,
-                        r2Minute = profile.reminder2Minute,
-                        userId = currentUserId
-                    )
+                val hadPendingSyncBefore = repository.getProfileOnce(currentUserId)?.pendingSync == true
+                isSyncingFlow.value = true
+                val result = withTimeoutOrNull(DuroodRepository.CLOUD_SYNC_TIMEOUT_MS) {
+                    repository.syncWithCloud()
+                } ?: Result.failure(TimeoutException("Sync timed out"))
+
+                if (result.isSuccess) {
+                    val profile = repository.getProfileOnce(currentUserId)
+                    if (profile != null && !hadPendingSyncBefore && !profile.pendingSync) {
+                        ThemePreferenceStore.setThemeMode(
+                            appContext,
+                            AppThemeMode.fromStorageKey(profile.themeMode)
+                        )
+                    }
+                    if (profile != null && profile.setupCompleted) {
+                        ReminderScheduler.scheduleReminders(
+                            context = appContext,
+                            enabled = profile.remindersEnabled,
+                            r1Hour = profile.reminder1Hour,
+                            r1Minute = profile.reminder1Minute,
+                            r2Hour = profile.reminder2Hour,
+                            r2Minute = profile.reminder2Minute,
+                            userId = currentUserId
+                        )
+                    }
+                    pushDirtyGroupStatsDuringBatchSync()
                 }
-                pushDirtyGroupStatsDuringBatchSync()
+                if (!silent) {
+                    statusMessageFlow.value = if (result.isSuccess) {
+                        "Synced with cloud"
+                    } else {
+                        "Sync queued — will retry automatically"
+                    }
+                }
+                refreshGlobalStats()
+            } finally {
+                isSyncingFlow.value = false
+                syncInFlight.set(false)
             }
-            if (!silent) {
-                statusMessageFlow.value = if (result.isSuccess) {
-                    "Synced with cloud"
-                } else {
-                    "Sync queued — will retry automatically"
-                }
-            }
-            refreshGlobalStats()
         }
     }
 

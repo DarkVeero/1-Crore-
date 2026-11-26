@@ -461,7 +461,16 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
      * - Pushes pending local counts, custom counters, & manual edits up to Firestore.
      * - Pulls larger cloud counts down to Room.
      */
-    suspend fun syncWithCloud(): Result<Unit> = syncMutex.withLock {
+    suspend fun syncWithCloud(timeoutMs: Long = CLOUD_SYNC_TIMEOUT_MS): Result<Unit> {
+        val result = withTimeoutOrNull(timeoutMs) {
+            syncMutex.withLock {
+                performSyncWithCloud()
+            }
+        } ?: return Result.failure(TimeoutException("syncWithCloud timed out after ${timeoutMs}ms"))
+        return result
+    }
+
+    private suspend fun performSyncWithCloud(): Result<Unit> {
         val uid = try {
             requireUserId()
         } catch (e: Exception) {
@@ -481,7 +490,7 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
                 throw e
             } catch (e: Exception) {
                 handleFirestoreError(e, OperationType.GET, profileRef.path, auth)
-            null
+                throw e
             }
 
             val cloudProfile = cloudProfileSnap?.toObject(FirestoreUserProfile::class.java)
@@ -679,6 +688,14 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
                 dailyDao.markDaySynced(uid, pending.dateKey)
             }
 
+            // Ensure all daily counts matching or behind cloud are marked synced
+            for ((dateKey, cloudDay) in cloudByDate) {
+                val currentLocal = dailyDao.getDay(uid, dateKey)
+                if (currentLocal != null && currentLocal.pendingSync && currentLocal.count <= cloudDay.count.coerceAtLeast(0L)) {
+                    dailyDao.markDaySynced(uid, dateKey)
+                }
+            }
+
             // 6. Sync Custom Counters
             val cloudCustomSnap = try {
                 customCollection.get().await()
@@ -786,6 +803,14 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
                 customDao.markCounterSynced(pending.id)
             }
 
+            // Ensure all custom counters matching or behind cloud are marked synced
+            for ((counterId, cloudCounter) in cloudCustomById) {
+                val currentLocal = customDao.getCounter(counterId)
+                if (currentLocal != null && currentLocal.pendingSync && currentLocal.currentCount <= cloudCounter.currentCount.coerceAtLeast(0L)) {
+                    customDao.markCounterSynced(counterId)
+                }
+            }
+
             // If existing counts or custom counters were found in Firestore (or locally), ensure setupCompleted is true
             val hasAnyCountsOrCounters = cloudByDate.isNotEmpty() ||
                 cloudCustomById.isNotEmpty() ||
@@ -861,7 +886,7 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
 
             val syncedAt = System.currentTimeMillis()
             if (profileDao.getProfile(uid) != null) {
-                if (cloudProfileSnap != null) profileDao.markProfileSynced(uid, syncedAt)
+                profileDao.markProfileSynced(uid, syncedAt)
             }
 
             Result.success(Unit)
@@ -1839,6 +1864,7 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
     
         const val ONE_CRORE = 10_000_000L
         const val DEFAULT_DAILY_TARGET = 2600
+        const val CLOUD_SYNC_TIMEOUT_MS = 10_000L
         const val GLOBAL_STATS_FETCH_TIMEOUT_MS = 9_000L
         const val ANNOUNCEMENT_FETCH_TIMEOUT_MS = GLOBAL_STATS_FETCH_TIMEOUT_MS
         const val GLOBAL_STATS_LOG_TAG = "GlobalStats"
