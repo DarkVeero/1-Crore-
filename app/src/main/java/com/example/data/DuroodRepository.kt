@@ -860,7 +860,7 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
 
             val syncedAt = System.currentTimeMillis()
             if (profileDao.getProfile(uid) != null) {
-                profileDao.markProfileSynced(uid, syncedAt)
+                if (cloudProfileSnap != null) profileDao.markProfileSynced(uid, syncedAt)
             }
 
             Result.success(Unit)

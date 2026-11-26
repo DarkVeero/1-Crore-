@@ -1095,6 +1095,7 @@ object GroupRepository {
             remoteIds.add(doc.id)
             if (doc.id in deletedIds) return@forEach
             val remote = parseFirestoreGroupDoc(doc.id, doc.data) ?: return@forEach
+            if (remote.id in pendingJoins) return@forEach
             val local = all[remote.id]
             val merged = mergeRemoteAndLocalGroup(local, remote)
             if (merged != local) {
