@@ -18,15 +18,21 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -35,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.announcements.AnnouncementHistoryEntry
 import com.example.announcements.AnnouncementItem
+import com.example.announcements.MilestoneAnnouncementManager
 import com.example.ui.components.BlackPillButton
 import com.example.ui.components.FaintGridBackground
 import com.example.ui.components.buildLinkifiedAnnouncementBody
@@ -47,10 +54,13 @@ import java.util.Locale
 fun MessagesHistoryScreen(
     entries: List<AnnouncementHistoryEntry>,
     onBack: () -> Unit,
-    onActionClick: (AnnouncementItem) -> Unit
+    onActionClick: (AnnouncementItem) -> Unit,
+    isOwner: Boolean = false,
+    onDeleteAnnouncement: (AnnouncementItem) -> Unit = {}
 ) {
     BackHandler(onBack = onBack)
     val palette = AppThemeColors.palette
+    var pendingDeleteAnnouncement by remember { mutableStateOf<AnnouncementItem?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         FaintGridBackground()
@@ -139,22 +149,75 @@ fun MessagesHistoryScreen(
                     ) { entry ->
                         AnnouncementHistoryCard(
                             entry = entry,
-                            onActionClick = onActionClick
+                            onActionClick = onActionClick,
+                            isOwner = isOwner,
+                            onDeleteClick = { pendingDeleteAnnouncement = entry.announcement }
                         )
                     }
                 }
             }
         }
     }
+
+    pendingDeleteAnnouncement?.let { target ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteAnnouncement = null },
+            containerColor = palette.cardSurface,
+            titleContentColor = palette.onCard,
+            textContentColor = palette.onCardSubtext,
+            title = {
+                Text(
+                    text = "Delete announcement?",
+                    color = palette.onCard,
+                    fontWeight = FontWeight.SemiBold
+                )
+            },
+            text = {
+                Text(
+                    text = target.title.ifBlank { target.body.take(80) }.ifBlank { "This announcement" },
+                    color = palette.onCardSubtext
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingDeleteAnnouncement = null
+                        onDeleteAnnouncement(target)
+                    },
+                    modifier = Modifier.testTag("messages_history_delete_confirm_button")
+                ) {
+                    Text(
+                        text = "Delete",
+                        color = palette.error,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { pendingDeleteAnnouncement = null },
+                    modifier = Modifier.testTag("messages_history_delete_cancel_button")
+                ) {
+                    Text(
+                        text = "Cancel",
+                        color = palette.onCardSubtext
+                    )
+                }
+            }
+        )
+    }
 }
 
 @Composable
 private fun AnnouncementHistoryCard(
     entry: AnnouncementHistoryEntry,
-    onActionClick: (AnnouncementItem) -> Unit
+    onActionClick: (AnnouncementItem) -> Unit,
+    isOwner: Boolean = false,
+    onDeleteClick: () -> Unit = {}
 ) {
     val palette = AppThemeColors.palette
     val item = entry.announcement
+    val canDelete = isOwner && !MilestoneAnnouncementManager.isMilestoneAnnouncementId(item.id)
     val formattedDate = remember(entry.recordedAtMillis) {
         formatHistoryTimestamp(entry.recordedAtMillis)
     }
@@ -176,7 +239,7 @@ private fun AnnouncementHistoryCard(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            if (item.isUrgent || formattedDate.isNotBlank()) {
+            if (item.isUrgent || formattedDate.isNotBlank() || canDelete) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -208,6 +271,21 @@ private fun AnnouncementHistoryCard(
                             color = palette.onCardSubtext,
                             modifier = Modifier.testTag("messages_history_date_${item.id}")
                         )
+                    }
+                    if (canDelete) {
+                        Spacer(modifier = Modifier.weight(1f))
+                        IconButton(
+                            onClick = onDeleteClick,
+                            modifier = Modifier
+                                .minimumInteractiveComponentSize()
+                                .testTag("messages_history_delete_${item.id}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Delete,
+                                contentDescription = "Delete announcement",
+                                tint = palette.onCardSubtext
+                            )
+                        }
                     }
                 }
             }

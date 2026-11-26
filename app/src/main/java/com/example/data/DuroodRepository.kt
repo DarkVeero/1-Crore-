@@ -5,6 +5,7 @@ import android.util.Log
 import com.example.R
 import com.example.announcements.AnnouncementItem
 import com.example.announcements.AnnouncementParser
+import com.example.announcements.MilestoneAnnouncementManager
 import com.example.data.local.AppDatabase
 import com.example.data.local.CustomCounterEntity
 import com.example.data.local.DailyCountEntity
@@ -1605,6 +1606,33 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
         if (writeError != null) return Result.failure(writeError)
         if (cloudWrite.getOrNull() == null) return Result.failure(java.util.concurrent.TimeoutException("Announcement cloud write timed out"))
         return Result.success(item)
+    }
+
+    suspend fun deleteAnnouncement(announcementId: String): Result<Unit> {
+        val cleanId = announcementId.trim()
+        if (cleanId.isEmpty() || MilestoneAnnouncementManager.isMilestoneAnnouncementId(cleanId)) {
+            return Result.failure(IllegalArgumentException("Invalid announcement id for cloud delete"))
+        }
+        val cloudDelete = runCatching {
+            withTimeoutOrNull(4_000L) {
+                firestore.collection("announcements")
+                    .document(cleanId)
+                    .delete()
+                    .await()
+                Unit
+            }
+        }.onFailure { err ->
+            Log.i(
+                ANNOUNCEMENT_LOG_TAG,
+                "cloud delete failed: ${err.message}"
+            )
+        }
+        val deleteError = cloudDelete.exceptionOrNull()
+        if (deleteError != null) return Result.failure(deleteError)
+        if (cloudDelete.getOrNull() == null) {
+            return Result.failure(TimeoutException("Announcement cloud delete timed out"))
+        }
+        return Result.success(Unit)
     }
 
     suspend fun fetchAnnouncementById(announcementId: String): AnnouncementItem? {

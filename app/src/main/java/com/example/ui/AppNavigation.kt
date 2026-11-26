@@ -73,6 +73,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.announcements.AnnouncementLaunchRequest
+import com.example.announcements.AnnouncementOwnerConfig
 import com.example.data.DuroodRepository
 import com.example.floating.FloatingCounterManager
 import com.example.notifications.ReminderScheduler
@@ -750,10 +751,15 @@ internal fun MainTabScaffold(
                         )
                     }
                     composable(ROUTE_MESSAGES_HISTORY) {
+                        val effectiveEmail = userEmail.ifBlank {
+                            runCatching { Firebase.auth.currentUser?.email }.getOrNull().orEmpty()
+                        }
                         MessagesHistoryScreen(
                             entries = uiState.announcementHistory,
                             onBack = { navController.popBackStack() },
-                            onActionClick = viewModel::onHistoryAnnouncementActionClicked
+                            onActionClick = viewModel::onHistoryAnnouncementActionClicked,
+                            isOwner = AnnouncementOwnerConfig.isOwnerAccount(effectiveEmail),
+                            onDeleteAnnouncement = viewModel::deleteAnnouncement
                         )
                     }
                     composable(ROUTE_CUSTOM_COUNTERS) {

@@ -1307,6 +1307,45 @@ class MainViewModel(
         }
     }
 
+    fun deleteAnnouncement(
+        item: AnnouncementItem,
+        onComplete: ((Boolean, String) -> Unit)? = null
+    ) {
+        if (item.id.isBlank() || MilestoneAnnouncementManager.isMilestoneAnnouncementId(item.id)) {
+            onComplete?.invoke(false, "Milestone announcements cannot be deleted.")
+            return
+        }
+        viewModelScope.launch {
+            val result = repository.deleteAnnouncement(item.id)
+            result.fold(
+                onSuccess = {
+                    AnnouncementHistoryStore.removeAnnouncementById(
+                        context = appContext,
+                        userId = currentUserId,
+                        announcementId = item.id
+                    )
+                    latestCloudAnnouncementsForHistory = latestCloudAnnouncementsForHistory
+                        ?.filterNot { it.id == item.id }
+                    lastHistoryCloudFetchMillis = 0L
+                    if (activeAnnouncementFlow.value?.id == item.id) {
+                        isCurrentAnnouncementShownRecorded = false
+                        isDirectAnnouncementFlow.value = false
+                        activeAnnouncementFlow.value = null
+                    }
+                    refreshAnnouncementHistory()
+                    val message = "Announcement deleted"
+                    statusMessageFlow.value = message
+                    onComplete?.invoke(true, message)
+                },
+                onFailure = { err ->
+                    val msg = err.localizedMessage ?: "Failed to delete announcement."
+                    statusMessageFlow.value = msg
+                    onComplete?.invoke(false, msg)
+                }
+            )
+        }
+    }
+
     internal suspend fun resolveCurrentAudienceContext(
         nowMillis: Long = System.currentTimeMillis(),
         zoneId: ZoneId = ZoneId.systemDefault()
