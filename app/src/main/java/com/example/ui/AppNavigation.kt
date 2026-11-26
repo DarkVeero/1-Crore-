@@ -20,12 +20,10 @@ import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.RadioButtonChecked
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.RadioButtonChecked
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -52,7 +50,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathFillType
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.PathNode
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -138,6 +140,37 @@ internal fun resolveRootTabNavigationSpec(targetRoute: String): TabNavigationSpe
     )
 }
 
+// ⌬ (U+2332) as a custom tab icon, traced from the Noto Sans Symbols glyph so it
+// renders exactly like the symbol. Default size 24.dp, the same as the other tab icons.
+private val TaperIcon: ImageVector = ImageVector.Builder(
+    name = "Taper",
+    defaultWidth = 24.dp,
+    defaultHeight = 24.dp,
+    viewportWidth = 24f,
+    viewportHeight = 24f
+).addPath(
+    pathData = listOf(
+        // Outer triangle.
+        PathNode.MoveTo(0f, 22.66f),
+        PathNode.LineTo(0f, 1.34f),
+        PathNode.LineTo(24f, 11.5f),
+        PathNode.LineTo(24f, 12.5f),
+        PathNode.Close,
+        // Upper inner triangle (hole).
+        PathNode.MoveTo(2.21f, 10.91f),
+        PathNode.LineTo(17.36f, 10.91f),
+        PathNode.LineTo(2.21f, 4.43f),
+        PathNode.Close,
+        // Lower inner triangle (hole).
+        PathNode.MoveTo(2.21f, 19.57f),
+        PathNode.LineTo(17.42f, 13.06f),
+        PathNode.LineTo(2.21f, 13.06f),
+        PathNode.Close
+    ),
+    pathFillType = PathFillType.EvenOdd,
+    fill = SolidColor(Color.Black)
+).build()
+
 internal enum class AppTab(
     val route: String,
     val label: String,
@@ -148,7 +181,7 @@ internal enum class AppTab(
     COUNTER("counter", "Counter", Icons.Filled.RadioButtonChecked, Icons.Outlined.RadioButtonChecked),
     HISTORY("history", "History", Icons.Filled.History, Icons.Outlined.History),
     STATS("stats", "Stats", Icons.Filled.BarChart, Icons.Outlined.BarChart),
-    SETTINGS("settings", "Settings", Icons.Filled.Settings, Icons.Outlined.Settings)
+    SETTINGS("settings", "Settings", TaperIcon, TaperIcon)
 }
 
 @Composable
