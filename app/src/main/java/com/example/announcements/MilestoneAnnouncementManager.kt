@@ -6,7 +6,8 @@ import com.example.data.GlobalCounterStats
 object MilestoneAnnouncementManager {
     const val MILESTONE_ONE_LAKH = 100_000L
     const val MILESTONE_TEN_LAKH = 1_000_000L
-    val THRESHOLDS = listOf(MILESTONE_ONE_LAKH, MILESTONE_TEN_LAKH)
+    const val MILESTONE_ONE_CRORE = 10_000_000L
+    val THRESHOLDS = listOf(MILESTONE_ONE_LAKH, MILESTONE_TEN_LAKH, MILESTONE_ONE_CRORE)
 
     private const val PREFS_NAME = "one_crore_milestone_announcements_prefs"
     private const val MILESTONE_ID_PREFIX = "milestone_"

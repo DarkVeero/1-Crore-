@@ -469,6 +469,8 @@ fun SettingsScreen(
 
             // Account
             SettingsSectionCard(title = "ACCOUNT") {
+            Text(text = "Signed in as: $effectiveEmail", style = MaterialTheme.typography.bodyMedium, color = palette.onCardSubtext, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+            if (!hasPasswordLinked) Text(text = "Google account — signed in with Google", style = MaterialTheme.typography.bodyMedium, color = palette.onCardSubtext, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                 if (hasPasswordLinked) {
                     SettingsActionRow(
                         title = "Change Password",
@@ -578,6 +580,7 @@ fun SettingsScreen(
     if (showChangePasswordDialog) {
         ChangePasswordDialog(
             onDismiss = { showChangePasswordDialog = false },
+                userEmail = effectiveEmail,
             onPasswordChanged = {
                 showChangePasswordDialog = false
                 localNotice = "Password updated successfully."
@@ -713,11 +716,6 @@ fun SettingsScreen(
             onSchedule = { item ->
                 showScheduleAnnouncementDialog = false
                 onScheduleAnnouncement(item)
-                localNotice = if (item.isScheduledForFuture(System.currentTimeMillis())) {
-                    "Announcement scheduled"
-                } else {
-                    "Announcement queued to send"
-                }
             }
         )
     }
@@ -836,7 +834,8 @@ private fun LinkBackupPasswordDialog(
 @Composable
 private fun ChangePasswordDialog(
     onDismiss: () -> Unit,
-    onPasswordChanged: () -> Unit
+    onPasswordChanged: () -> Unit,
+    userEmail: String? = null,
 ) {
     val palette = AppThemeColors.palette
     val scope = rememberCoroutineScope()
@@ -859,6 +858,7 @@ private fun ChangePasswordDialog(
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(text = "Signed in as: ${userEmail.orEmpty()}", style = MaterialTheme.typography.bodyMedium, color = palette.onCardSubtext)
                 OutlinedTextField(
                     value = currentPassword,
                     onValueChange = {
@@ -996,7 +996,7 @@ private fun ThemeModeSelectorRow(
                 .testTag("settings_theme_selector"),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            AppThemeMode.entries.forEach { mode ->
+            AppThemeMode.entries.filter { it != AppThemeMode.RED }.forEach { mode ->
                 val isSelected = selectedMode == mode
                 val tag = when (mode) {
                     AppThemeMode.BLACK_AND_WHITE -> "settings_theme_bw_option"
@@ -1299,7 +1299,7 @@ fun DeleteAccountConfirmDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    text = "This permanently deletes all your Durood Pak counts and profile from this phone and Firestore. Export a backup first if you want to keep your records. Enter your password below to confirm.",
+                    text = "This permanently deletes all your Durood Pak counts and profile from this phone and Firestore. Export a backup first if you want to keep your records. " + if (isGoogleOnly) "Tap Delete and confirm with your Google account." else "Enter your password below to confirm.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = palette.onCardSubtext
                 )

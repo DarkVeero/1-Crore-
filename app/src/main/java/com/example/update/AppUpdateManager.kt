@@ -147,7 +147,7 @@ class DriveVersionJsonUpdateSource(
         fun parseVersionJson(jsonText: String): AppUpdateInfo? {
             return try {
                 val obj = JSONObject(jsonText)
-                val versionCode = obj.optInt("versionCode", -1)
+                val versionCode = (obj.opt("versionCode") as? Number)?.toInt() ?: obj.optString("versionCode").toIntOrNull() ?: -1
                 val versionName = obj.optString("versionName", "").trim()
                 val downloadUrl = (
                     obj.optString("apkUrl", "").ifBlank {
@@ -195,7 +195,7 @@ class DriveVersionJsonUpdateSource(
 private val Context.updatePrefs by preferencesDataStore(name = "update_prefs")
 
 object AppUpdateManager {
-    const val LATER_COOLDOWN_MILLIS = 24L * 60L * 60L * 1000L
+    const val LATER_COOLDOWN_MILLIS = 10L * 60L * 1000L
     private val KEY_DISMISSED_DATE = stringPreferencesKey("update_dismissed_date")
     private val KEY_DISMISSED_AT_MILLIS = longPreferencesKey("update_dismissed_at_millis")
     private val KEY_DISMISSED_VERSION = intPreferencesKey("update_dismissed_version")
@@ -995,7 +995,7 @@ object AppUpdateManager {
                 setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                 setDestinationInExternalFilesDir(appContext, Environment.DIRECTORY_DOWNLOADS, fileName)
                 setAllowedOverMetered(true)
-                setAllowedOverRoaming(true)
+                setAllowedOverRoaming(false)
             }
             dm.enqueue(request)
         } catch (e: Exception) {
@@ -1073,7 +1073,7 @@ emit(ApkDownloadState.Downloading(downloadId, bytesDownloaded = 0L, totalBytes =
                         if (bytesDownloaded > lastProgressBytes) {
                         lastProgressBytes = bytesDownloaded
                         lastProgressAtMillis = System.currentTimeMillis()
-                    } else if (System.currentTimeMillis() - lastProgressAtMillis > 60_000L) {
+                    } else if (status == DownloadManager.STATUS_RUNNING && System.currentTimeMillis() - lastProgressAtMillis > 60_000L) {
                         runCatching { dm.remove(downloadId) }
                         runCatching { if (destFile.exists()) destFile.delete() }
                         appContext.updatePrefs.edit { it.remove(KEY_PENDING_DOWNLOAD_ID) }

@@ -24,6 +24,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -46,7 +47,7 @@ import java.util.Locale
 fun StatsScreen(uiState: MainUiState) {
     val palette = AppThemeColors.palette
     val best = uiState.bestDay
-    val byDate = uiState.allDays.associateBy { it.dateKey }
+    val byDate = remember(uiState.allDays) { uiState.allDays.associateBy { it.dateKey } }
     val today = uiState.currentDate
     val last14Days = (13 downTo 0).map { offset ->
         val d = today.minusDays(offset.toLong())

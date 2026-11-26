@@ -25,7 +25,7 @@ enum class AppThemeMode(
         fun fromStorageKey(raw: String?): AppThemeMode {
             val normalized = raw?.trim().orEmpty()
             return entries.firstOrNull {
-                it.storageKey.equals(normalized, ignoreCase = true)
+                it != AppThemeMode.RED && it.storageKey.equals(normalized, ignoreCase = true)
             } ?: BLACK_AND_WHITE
         }
     }

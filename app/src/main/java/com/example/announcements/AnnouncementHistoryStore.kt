@@ -81,6 +81,28 @@ object AnnouncementHistoryStore {
         _historyUpdates.tryEmit(userId)
     }
 
+    fun pruneExpiredAnnouncements(context: Context, userId: String, nowMillis: Long = System.currentTimeMillis()) {
+        val current = getHistoryNewestFirst(context, userId)
+        val kept = current.filter { entry ->
+            MilestoneAnnouncementManager.isMilestoneAnnouncementId(entry.announcement.id) ||
+                entry.announcement.endAtMillis == Long.MAX_VALUE ||
+                entry.announcement.endAtMillis >= nowMillis
+        }
+        if (kept.size == current.size) return
+        val arr = JSONArray()
+        kept.forEach { entry ->
+            val obj = JSONObject().apply {
+                put("announcement", entry.announcement.toJsonObject())
+                put("recordedAtMillis", entry.recordedAtMillis)
+                put("status", entry.status)
+            }
+            arr.put(obj)
+        }
+        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString(historyKey(userId), arr.toString()).apply()
+        _historyUpdates.tryEmit(userId)
+    }
+
     fun getHistoryNewestFirst(
         context: Context,
         userId: String

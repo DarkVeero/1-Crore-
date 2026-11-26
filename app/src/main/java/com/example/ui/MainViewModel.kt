@@ -240,6 +240,7 @@ class MainViewModel(
 
     private val currentDateFlow = MutableStateFlow(LocalDate.now())
     private val isSyncingFlow = MutableStateFlow(false)
+    private val syncInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
     private val statusMessageFlow = MutableStateFlow<String?>(null)
     private val initializedFlow = MutableStateFlow(false)
     private val initialLoadOfflineErrorFlow = MutableStateFlow(false)
@@ -681,8 +682,13 @@ class MainViewModel(
             if (online) {
                 isSyncingFlow.value = true
                 val hadPendingSyncBefore = repository.getProfileOnce(currentUserId)?.pendingSync == true
-                val syncResult = try { repository.syncWithCloud() } finally { isSyncingFlow.value = false }
-                isSyncingFlow.value = false
+                val syncResult = try {
+                    withTimeoutOrNull(INITIAL_CLOUD_SYNC_TIMEOUT_MS) {
+                        repository.syncWithCloud()
+                    }
+                } finally {
+                    isSyncingFlow.value = false
+                }
 
                 val hasLocalAfterSync = repository.hasLocalExistingData(currentUserId)
                 if (hasLocalAfterSync) {
@@ -691,7 +697,7 @@ class MainViewModel(
                         fallbackName = effectiveFallbackName,
                         accountCreatedAtMillis = accountCreatedAtMillis
                     )
-                    if (!hadPendingSyncBefore && syncResult.isSuccess) {
+                    if (!hadPendingSyncBefore && syncResult?.isSuccess == true) {
                         val syncedProfile = repository.getProfileOnce(currentUserId)
                         if (syncedProfile != null && !syncedProfile.pendingSync) {
                             ThemePreferenceStore.setThemeMode(
@@ -701,6 +707,15 @@ class MainViewModel(
                         }
                     }
                     AuthFlowStore.clearNewEmailSignup(appContext, currentUserId)
+                    if (syncResult == null) {
+                        triggerSync(silent = true)
+                        SyncWorker.enqueueWhenOnline(appContext)
+                    }
+                } else if (syncResult == null) {
+                    // Initial cloud sync timed out: proceed without setting offline error and
+                    // keep syncing in the background so cloud data still arrives.
+                    triggerSync(silent = true)
+                    SyncWorker.enqueueWhenOnline(appContext)
                 } else if (syncResult.isFailure) {
                     // Cloud fetch failed and there is no local data: do NOT show Setup!
                     initialLoadOfflineErrorFlow.value = true
@@ -779,7 +794,7 @@ class MainViewModel(
 
     fun onTapPlusOne() {
         optimisticTapDeltaFlow.value += 1L
-        viewModelScope.launch {
+        launchSafe {
             val activeDateKey = refreshCurrentDate().toString()
             try {
             repository.incrementCount(currentUserId, activeDateKey, 1L)
@@ -799,17 +814,17 @@ class MainViewModel(
     }
 
     fun onAppPaused() {
-        unsyncedTapCount = 0
         val hasDirtyGroups = GroupRepository.getDirtyGroupSyncIds(appContext).isNotEmpty()
         SyncWorker.enqueueWhenOnline(appContext)
         if ((uiState.value.hasPendingSync || hasDirtyGroups) && NetworkMonitor.isCurrentlyOnline(appContext)) {
             triggerSync(silent = true)
+            unsyncedTapCount = 0
         }
     }
 
     fun onAddCustomAmount(amount: Long) {
         if (amount <= 0L) return
-        viewModelScope.launch {
+        launchSafe {
             val activeDateKey = refreshCurrentDate().toString()
             repository.incrementCount(currentUserId, activeDateKey, amount)
             SyncWorker.enqueueWhenOnline(appContext)
@@ -820,7 +835,7 @@ class MainViewModel(
     }
 
     fun onEditDayCount(dateKey: String, newCount: Long, oldCount: Long) {
-        viewModelScope.launch {
+        launchSafe {
             repository.adjustDayCount(currentUserId, dateKey, newCount - oldCount)
             SyncWorker.enqueueWhenOnline(appContext)
             if (NetworkMonitor.isCurrentlyOnline(appContext)) {
@@ -847,7 +862,7 @@ class MainViewModel(
     }
 
     fun onTapCustomCounterPlusOne(counterId: String) {
-        viewModelScope.launch {
+        launchSafe {
             repository.incrementCustomCounter(currentUserId, counterId, 1L)
             SyncWorker.enqueueWhenOnline(appContext)
             unsyncedTapCount++
@@ -877,7 +892,7 @@ class MainViewModel(
         targetCount: Long,
         currentCount: Long
     ) {
-        viewModelScope.launch {
+        launchSafe {
             repository.updateCustomCounterDetails(
                 userId = currentUserId,
                 counterId = counterId,
@@ -893,7 +908,7 @@ class MainViewModel(
     }
 
     fun onDeleteCustomCounter(counterId: String) {
-        viewModelScope.launch {
+        launchSafe {
             repository.deleteCustomCounter(currentUserId, counterId)
             SyncWorker.enqueueWhenOnline(appContext)
             if (NetworkMonitor.isCurrentlyOnline(appContext)) {
@@ -903,7 +918,7 @@ class MainViewModel(
     }
 
     fun onCompleteSetup(displayName: String, dailyTarget: Int) {
-        viewModelScope.launch {
+        launchSafe {
             repository.completeSetup(
                 userId = currentUserId,
                 displayName = displayName,
@@ -932,7 +947,7 @@ class MainViewModel(
     }
 
     fun onUpdatePlan(dailyTarget: Int) {
-        viewModelScope.launch {
+        launchSafe {
             repository.updatePlan(currentUserId, dailyTarget)
             statusMessageFlow.value = "Plan updated: $dailyTarget / day"
             SyncWorker.enqueueWhenOnline(appContext)
@@ -943,7 +958,7 @@ class MainViewModel(
     }
 
     fun onUpdateDisplayName(displayName: String) {
-        viewModelScope.launch {
+        launchSafe {
             repository.updateDisplayName(currentUserId, displayName)
             statusMessageFlow.value = "Name updated"
             SyncWorker.enqueueWhenOnline(appContext)
@@ -960,7 +975,7 @@ class MainViewModel(
         r2Hour: Int,
         r2Minute: Int
     ) {
-        viewModelScope.launch {
+        launchSafe {
             repository.updateReminders(currentUserId, enabled, r1Hour, r1Minute, r2Hour, r2Minute)
             ReminderScheduler.scheduleReminders(
                 context = appContext,
@@ -981,7 +996,7 @@ class MainViewModel(
 
     fun onUpdateThemeMode(mode: AppThemeMode) {
         ThemePreferenceStore.setThemeMode(appContext, mode)
-        viewModelScope.launch {
+        launchSafe {
             repository.updateThemeMode(currentUserId, mode, fallbackDisplayName)
             statusMessageFlow.value = "Theme: ${mode.displayLabel}"
             SyncWorker.enqueueWhenOnline(appContext)
@@ -991,10 +1006,17 @@ class MainViewModel(
         }
     }
 
+    private fun launchSafe(block: suspend () -> Unit) {
+        viewModelScope.launch {
+            runCatching { block() }.onFailure { statusMessageFlow.value = it.message ?: "Something went wrong." }
+        }
+    }
+
     fun triggerSync(silent: Boolean = false) {
         unsyncedTapCount = 0
         WidgetAndFloatingBridge.resetUnsyncedTapCount(appContext)
         if (isSyncingFlow.value) return
+        if (!syncInFlight.compareAndSet(false, true)) return
         viewModelScope.launch {
             if (!NetworkMonitor.isCurrentlyOnline(appContext)) {
                 SyncWorker.enqueueWhenOnline(appContext)
@@ -1009,6 +1031,7 @@ class MainViewModel(
             repository.syncWithCloud()
         } finally {
             isSyncingFlow.value = false
+                syncInFlight.set(false)
         }
              
             if (result.isSuccess) {
@@ -1334,6 +1357,7 @@ class MainViewModel(
     }
 
     fun refreshAnnouncementHistory() {
+        AnnouncementHistoryStore.pruneExpiredAnnouncements(appContext, currentUserId)
         announcementHistoryFlow.value = AnnouncementHistoryStore.getHistoryNewestFirst(
             appContext,
             currentUserId
@@ -1830,6 +1854,22 @@ class MainViewModel(
         }
     }
 
+    private fun restoreDownloadedApkIfReady(update: AppUpdateInfo) {
+        val downloadsDir = appContext.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS) ?: return
+        val file = java.io.File(downloadsDir, "1crore-update-${update.versionCode}.apk")
+        if (!file.exists() || file.length() == 0L || !AppUpdateManager.isValidApkFile(appContext, file)) return
+        downloadedApkFile = file
+        updateStateFlow.value = updateStateFlow.value.copy(
+            isDownloading = false,
+            downloadProgress = 1f,
+            downloadStatusText = "Download complete",
+            needsInstallPermission = false,
+            pendingInstallReady = true,
+            showDialog = true,
+            errorMessage = null
+        )
+    }
+
     fun checkForAppUpdate() {
         viewModelScope.launch {
             val settleWatchdog = launch {
@@ -1842,6 +1882,7 @@ class MainViewModel(
                 val cached = AppUpdateManager.getCachedAvailableUpdate(appContext)
                 if (cached != null) {
                     val autoShow = AppUpdateManager.shouldAutoShowDialog(appContext, cached)
+                    restoreDownloadedApkIfReady(cached)
                     updateStateFlow.value = updateStateFlow.value.copy(
                         availableUpdate = cached,
                         showDialog = updateStateFlow.value.showDialog || autoShow,
@@ -1862,6 +1903,7 @@ class MainViewModel(
                     updateStateFlow.value = UpdateUiState(isCheckSettled = true)
                 } else {
                     val autoShow = AppUpdateManager.shouldAutoShowDialog(appContext, latest)
+                    restoreDownloadedApkIfReady(latest)
                     updateStateFlow.value = updateStateFlow.value.copy(
                         availableUpdate = latest,
                         showDialog = updateStateFlow.value.showDialog || autoShow,
@@ -1891,7 +1933,7 @@ class MainViewModel(
     fun dismissUpdateDialogForToday() {
         val current = updateStateFlow.value.availableUpdate ?: return
         val state = updateStateFlow.value
-        if (current.isForced || state.isPreparingUpdate || state.isDownloading) return
+        if (current.isForced || state.isPreparingUpdate) return
         updateStateFlow.value = state.copy(
             showDialog = false,
             isCheckSettled = true,
@@ -2031,6 +2073,7 @@ class MainViewModel(
                             downloadStatusText = "Download complete. Opening installer...",
                             needsInstallPermission = false,
                             pendingInstallReady = true,
+                            showDialog = true,
                             errorMessage = null
                         )
                         // Sync once more before the installer opens, so the latest counts are on the server before the update restarts the app. A failed sync must never block the installer.
@@ -2316,6 +2359,7 @@ class MainViewModel(
         onJoined: (GroupItem) -> Unit = {}
     ) {
         if (isJoiningGroupFlow.value) return
+        isJoiningGroupFlow.value = true
         viewModelScope.launch {
             isJoiningGroupFlow.value = true
             try {
@@ -2582,5 +2626,6 @@ class MainViewModel(
         const val BATCH_SYNC_TAP_THRESHOLD = 100
         const val AUTO_SYNC_INTERVAL_MILLIS = 5L * 60L * 1000L
         const val GROUP_FLUSH_DEBOUNCE_MILLIS = 1_500L
+        const val INITIAL_CLOUD_SYNC_TIMEOUT_MS = 6_000L
     }
 }

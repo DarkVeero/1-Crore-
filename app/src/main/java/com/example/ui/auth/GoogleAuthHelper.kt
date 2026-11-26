@@ -31,6 +31,16 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+
+internal const val GOOGLE_CREDENTIAL_TIMEOUT_MS = 15_000L
+internal const val GOOGLE_FIREBASE_SIGN_IN_TIMEOUT_MS = 10_000L
+
+internal const val GOOGLE_CREDENTIAL_TIMEOUT_MESSAGE =
+    "Google Sign-In timed out waiting for Google Play Services. Please check your internet connection and try again."
+
+internal const val GOOGLE_FIREBASE_SIGN_IN_TIMEOUT_MESSAGE =
+    "Signing in with Firebase timed out. Please check your internet connection and try again."
 
 internal const val GOOGLE_CONFIG_ERROR_MESSAGE =
     "Google Sign-In could not verify this build with Google Play / Firebase (this build's signing SHA-1 fingerprint may not be registered in Firebase Console). Please use the verified build or sign in with email and password."
@@ -209,7 +219,9 @@ internal suspend fun executeInteractiveGoogleCredentialFlow(
             null
         }
     },
-    signInWithIdToken: suspend (String) -> Unit
+    signInWithIdToken: suspend (String) -> Unit,
+    credentialTimeoutMillis: Long = GOOGLE_CREDENTIAL_TIMEOUT_MS,
+    firebaseSignInTimeoutMillis: Long = GOOGLE_FIREBASE_SIGN_IN_TIMEOUT_MS
 ): GoogleSignInAttemptResult {
     if (serverClientId.isBlank()) {
         return GoogleSignInAttemptResult.Error(
@@ -219,10 +231,22 @@ internal suspend fun executeInteractiveGoogleCredentialFlow(
     }
 
     suspend fun completeWithRequest(request: GetCredentialRequest): GoogleSignInAttemptResult {
-        val credential = fetchCredential(request)
+        val credential = withTimeoutOrNull(credentialTimeoutMillis) {
+            fetchCredential(request)
+        } ?: return GoogleSignInAttemptResult.Error(
+            message = GOOGLE_CREDENTIAL_TIMEOUT_MESSAGE
+        )
         val googleIdToken = extractIdToken(credential)
             ?: return GoogleSignInAttemptResult.Error("Unexpected credential type returned.")
-        signInWithIdToken(googleIdToken)
+        val signInCompleted = withTimeoutOrNull(firebaseSignInTimeoutMillis) {
+            signInWithIdToken(googleIdToken)
+            true
+        }
+        if (signInCompleted != true) {
+            return GoogleSignInAttemptResult.Error(
+                message = GOOGLE_FIREBASE_SIGN_IN_TIMEOUT_MESSAGE
+            )
+        }
         return GoogleSignInAttemptResult.Success(googleIdToken)
     }
 
@@ -312,7 +336,8 @@ fun attemptAutoSignIn(
             }
         } catch (e: CancellationException) {
             throw e
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w("Auth", "Auto sign-in failed", e)
             onUnauthenticated()
         }
     }

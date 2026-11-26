@@ -380,6 +380,38 @@ object GroupRepository {
         todayDateKey: String = LocalDate.now().toString(),
         nowMillis: Long = System.currentTimeMillis()
     ): Result<GroupItem> {
+        return groupWriteMutex.withLock {
+            createGroupLocked(
+                context = context,
+                creatorUserId = creatorUserId,
+                creatorDisplayName = creatorDisplayName,
+                name = name,
+                type = type,
+                zikrName = zikrName,
+                targetCount = targetCount,
+                creatorTodayCount = creatorTodayCount,
+                creatorLifetimeTotal = creatorLifetimeTotal,
+                creatorWeeklyCount = creatorWeeklyCount,
+                todayDateKey = todayDateKey,
+                nowMillis = nowMillis
+            )
+        }
+    }
+
+    suspend fun createGroupLocked(
+        context: Context,
+        creatorUserId: String,
+        creatorDisplayName: String,
+        name: String,
+        type: GroupType,
+        zikrName: String? = null,
+        targetCount: Long = GroupLogic.DEFAULT_UNIFIED_GROUP_TARGET,
+        creatorTodayCount: Long = 0L,
+        creatorLifetimeTotal: Long = 0L,
+        creatorWeeklyCount: Long = 0L,
+        todayDateKey: String = LocalDate.now().toString(),
+        nowMillis: Long = System.currentTimeMillis()
+    ): Result<GroupItem> {
         val cleanName = name.trim().take(60)
         if (cleanName.isEmpty()) {
             return Result.failure(IllegalArgumentException("Enter a group name."))
@@ -444,6 +476,32 @@ object GroupRepository {
     }
 
     suspend fun joinGroupByCode(
+        context: Context,
+        userId: String,
+        displayName: String,
+        rawInviteCode: String,
+        userTodayCount: Long = 0L,
+        userLifetimeTotal: Long = 0L,
+        userWeeklyCount: Long = 0L,
+        todayDateKey: String = LocalDate.now().toString(),
+        nowMillis: Long = System.currentTimeMillis()
+    ): Result<GroupItem> {
+        return groupWriteMutex.withLock {
+            joinGroupByCodeLocked(
+                context = context,
+                userId = userId,
+                displayName = displayName,
+                rawInviteCode = rawInviteCode,
+                userTodayCount = userTodayCount,
+                userLifetimeTotal = userLifetimeTotal,
+                userWeeklyCount = userWeeklyCount,
+                todayDateKey = todayDateKey,
+                nowMillis = nowMillis
+            )
+        }
+    }
+
+    suspend fun joinGroupByCodeLocked(
         context: Context,
         userId: String,
         displayName: String,
@@ -557,6 +615,24 @@ object GroupRepository {
         newName: String,
         nowMillis: Long = System.currentTimeMillis()
     ): Result<GroupItem> {
+        return groupWriteMutex.withLock {
+            renameGroupLocked(
+                context = context,
+                userId = userId,
+                groupId = groupId,
+                newName = newName,
+                nowMillis = nowMillis
+            )
+        }
+    }
+
+    suspend fun renameGroupLocked(
+        context: Context,
+        userId: String,
+        groupId: String,
+        newName: String,
+        nowMillis: Long = System.currentTimeMillis()
+    ): Result<GroupItem> {
         val cleanName = newName.trim().take(60)
         if (cleanName.isEmpty()) {
             return Result.failure(IllegalArgumentException("Enter a group name."))
@@ -599,6 +675,20 @@ object GroupRepository {
         userId: String,
         groupId: String
     ): Result<Unit> {
+        return groupWriteMutex.withLock {
+            deleteGroupLocked(
+                context = context,
+                userId = userId,
+                groupId = groupId
+            )
+        }
+    }
+
+    suspend fun deleteGroupLocked(
+        context: Context,
+        userId: String,
+        groupId: String
+    ): Result<Unit> {
         val allGroups = readAllGroups(context)
         val existing = allGroups[groupId]
             ?: return Result.failure(IllegalStateException("Group not found"))
@@ -621,12 +711,28 @@ object GroupRepository {
         groupId: String,
         nowMillis: Long = System.currentTimeMillis()
     ): Result<Unit> {
+        return groupWriteMutex.withLock {
+            leaveGroupLocked(
+                context = context,
+                userId = userId,
+                groupId = groupId,
+                nowMillis = nowMillis
+            )
+        }
+    }
+
+    suspend fun leaveGroupLocked(
+        context: Context,
+        userId: String,
+        groupId: String,
+        nowMillis: Long = System.currentTimeMillis()
+    ): Result<Unit> {
         val allGroups = readAllGroups(context)
-        val group = allGroups[groupId] ?: return Result.success(Unit)
+        val group = allGroups[groupId] ?: return Result.failure(IllegalStateException("Group not found"))
         val remainingMembers = group.members.filterNot { it.userId == userId }
         if (group.creatorUserId == userId) {
             if (remainingMembers.isEmpty()) {
-                return deleteGroup(context, userId, groupId).map {}
+                return deleteGroupLocked(context, userId, groupId).map {}
             }
             val updatedGroup = group.copy(
                 members = remainingMembers,
@@ -1043,6 +1149,7 @@ object GroupRepository {
             val pendingGroup = allLocal[pendingId]
             val pendingName = readPendingRenameName(context, pendingId)?.takeIf { it.isNotBlank() }
                 ?: pendingGroup?.name
+            if (pendingGroup != null && pendingGroup.creatorUserId != userId) { markPendingRenameSync(context, pendingId, null, pending = false); return@forEach }
             if (pendingGroup == null || pendingName.isNullOrBlank()) {
                 markPendingRenameSync(context, pendingId, null, pending = false)
             } else {
@@ -1308,7 +1415,7 @@ object GroupRepository {
             withTimeoutOrNull(FIRESTORE_OP_TIMEOUT_MS) {
                 db.runTransaction { tx ->
                     val snap = tx.get(docRef)
-                    val base = if (snap.exists()) parseFirestoreGroupDoc(snap.id, snap.data) else fallbackGroup
+                    val base = if (snap.exists()) parseFirestoreGroupDoc(snap.id, snap.data) else return@runTransaction null
                     if (base == null) return@runTransaction null
                     if (base.creatorUserId.isNotBlank() && base.creatorUserId != creatorUserId) {
                         return@runTransaction null
@@ -1360,7 +1467,7 @@ object GroupRepository {
                 db.runTransaction { tx ->
                     val snap = tx.get(docRef)
                     val remote = if (snap.exists()) parseFirestoreGroupDoc(snap.id, snap.data) else null
-                    val base = remote ?: getGroupById(context, groupId) ?: return@runTransaction null
+                    val base = remote ?: return@runTransaction null
                     val updatedMembers = base.members
                         .filterNot { it.userId == member.userId }
                         .plus(member)
@@ -1402,13 +1509,13 @@ object GroupRepository {
             withTimeoutOrNull(3_500L) {
                 db.runTransaction { tx ->
                     val snap = tx.get(docRef)
-                    val base = if (snap.exists()) parseFirestoreGroupDoc(snap.id, snap.data) else getGroupById(context, groupId)
+                    val base = if (snap.exists()) parseFirestoreGroupDoc(snap.id, snap.data) else return@runTransaction null
                     if (base == null) return@runTransaction null
                     val remaining = base.members.filterNot { it.userId == userId }
                     val updated = base.copy(
                         members = remaining,
                         serverTotalCount = remaining.sumOf { it.lifetimeTotalCount.coerceAtLeast(0L) },
-                        updatedAtMillis = nowMillis
+                        updatedAtMillis = maxOf(base.updatedAtMillis + 1L, nowMillis)
                     )
                     tx.set(docRef, toFirestoreMap(updated))
                     updated

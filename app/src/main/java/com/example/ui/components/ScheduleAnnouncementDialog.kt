@@ -66,6 +66,7 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAdjusters
 import java.util.Locale
+import java.util.UUID
 import kotlin.random.Random
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -768,8 +769,7 @@ internal fun buildAnnouncementItemFromForm(
     val cleanButtonText = buttonText.trim().ifBlank { "Join" }
     val cleanImage = imageUrl?.trim()?.takeIf { isValidHttpUrl(it) }
     val effectiveStart = if (scheduledAtMillis > 0L) scheduledAtMillis else nowMillis
-    val suffix = Random.nextInt(1000, 9999)
-    val id = "ann_${nowMillis}_$suffix"
+    val id = "ann_${UUID.randomUUID()}"
 
     return AnnouncementItem(
         id = id,

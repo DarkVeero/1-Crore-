@@ -76,9 +76,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        extractVerificationOobCode(intent.data)?.let { code ->
-            pendingVerificationCode = code
-        }
+        pendingVerificationCode = extractVerificationOobCode(intent.data)
         intent.getStringExtra(OneCroreWidgetProvider.EXTRA_WIDGET_ACTION)?.let { action ->
             pendingWidgetAction = action
         }

@@ -290,7 +290,7 @@ object FloatingCounterManager {
         }
 
         if (!overlayAttached || !serviceStarted) {
-            appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(KEY_IS_RUNNING, false).apply()
+            appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(KEY_IS_RUNNING, false).remove(KEY_TARGET_MODE).remove(KEY_TARGET_GROUP_ID).apply()
             _state.value = FloatingBubbleUiState()
             runCatching { OneCroreWidgetProvider.updateAllWidgetsState(appContext) }
             return false
@@ -342,7 +342,7 @@ object FloatingCounterManager {
 
         // Main floating button is now OFF -> ensure home-screen widget reflects OFF state
         if (!overlayAttached || !serviceStarted) {
-            appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(KEY_IS_RUNNING, false).apply()
+            appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(KEY_IS_RUNNING, false).remove(KEY_TARGET_MODE).remove(KEY_TARGET_GROUP_ID).apply()
             _state.value = FloatingBubbleUiState()
             runCatching { OneCroreWidgetProvider.updateAllWidgetsState(appContext) }
             return false

@@ -236,9 +236,7 @@ fun HomeScreen(
                     .testTag("home_header_column")
             ) {
                 val globalStats = uiState.globalStats
-                val hasGlobalStats = globalStats != null &&
-                    globalStats.totalCount > 0L &&
-                    globalStats.userCount > 0L
+                val hasGlobalStats = globalStats != null
                 BoxWithConstraints(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -844,7 +842,7 @@ internal fun AppUpdateDialog(
 ) {
     val palette = AppThemeColors.palette
     val busy = isPreparing || isDownloading
-    val canDismiss = !update.isForced && !busy
+    val canDismiss = !update.isForced
     AlertDialog(
         onDismissRequest = {
             if (canDismiss) {

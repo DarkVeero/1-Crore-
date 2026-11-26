@@ -196,7 +196,7 @@ fun extractVerificationOobCode(uri: Uri?): String? {
 
     val directMode = uri.getQueryParameter("mode")
     val directCode = uri.getQueryParameter("oobCode")?.takeIf { it.isNotBlank() }
-    if (directCode != null && (directMode.isNullOrBlank() || directMode == "verifyEmail")) {
+    if (directCode != null && directMode == "verifyEmail") {
         return directCode
     }
 
@@ -209,7 +209,7 @@ fun extractVerificationOobCode(uri: Uri?): String? {
         }
         val nestedMode = nestedUri?.getQueryParameter("mode")
         val nestedCode = nestedUri?.getQueryParameter("oobCode")?.takeIf { it.isNotBlank() }
-        if (nestedCode != null && (nestedMode.isNullOrBlank() || nestedMode == "verifyEmail")) {
+        if (nestedCode != null && nestedMode == "verifyEmail") {
             return nestedCode
         }
     }

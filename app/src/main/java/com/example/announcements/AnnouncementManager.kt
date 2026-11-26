@@ -421,7 +421,7 @@ object AnnouncementParser {
         val title = (notificationTitle ?: data["title"] ?: data["heading"])?.trim().orEmpty()
         val body = (notificationBody ?: data["body"] ?: data["message"] ?: data["description"])?.trim().orEmpty()
         if (id.isEmpty() && title.isEmpty() && body.isEmpty()) return null
-        val effectiveId = id.ifEmpty { "push_${("$title:$body").hashCode()}" }
+        val effectiveId = id.ifEmpty { "push_${System.currentTimeMillis()}_${("$title:$body").hashCode()}" }
 
         val mergedMap = mutableMapOf<String, Any?>()
         mergedMap.putAll(data)

@@ -138,11 +138,6 @@ fun AnnouncementDialog(
                     .heightIn(max = 600.dp)
                     .fillMaxWidth()
                     .border(1.dp, palette.strongBorder, RoundedCornerShape(16.dp))
-                    .clickable(
-                        interactionSource = cardInteraction,
-                        indication = null,
-                        onClick = onDismiss
-                    )
                     .testTag("announcement_dialog_card")
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
@@ -163,11 +158,6 @@ fun AnnouncementDialog(
                                 .height(168.dp)
                                 .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
                                 .background(palette.subtleSurface)
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null,
-                                    onClick = onDismiss
-                                )
                                 .testTag("announcement_dialog_image")
                         ) {
                             Image(
@@ -228,11 +218,6 @@ fun AnnouncementDialog(
                                         color = palette.onCard,
                                         fontWeight = FontWeight.SemiBold,
                                         modifier = Modifier
-                                            .clickable(
-                                                interactionSource = remember { MutableInteractionSource() },
-                                                indication = null,
-                                                onClick = onDismiss
-                                            )
                                             .testTag("announcement_dialog_title")
                                     )
                                 }
@@ -267,11 +252,6 @@ fun AnnouncementDialog(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(end = 8.dp)
-                                        .clickable(
-                                            interactionSource = remember { MutableInteractionSource() },
-                                            indication = null,
-                                            onClick = onDismiss
-                                        )
                                         .testTag("announcement_dialog_body")
                                 )
                             }

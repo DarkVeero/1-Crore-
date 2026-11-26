@@ -275,7 +275,7 @@ object AnnouncementScheduledDispatcher {
                 )
             }
             _dueAnnouncementEvents.tryEmit(item.id)
-            dispatchedCount++
+            if (posted) dispatchedCount++
         }
         return dispatchedCount
     }

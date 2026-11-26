@@ -72,7 +72,7 @@ service cloud.firestore {
       allow get: if isSignedIn() && isValidId(announcementId);
       allow list: if isSignedIn();
       allow create, update: if isSignedIn() && request.auth.token.email in ['1croresupport@gmail.com', 'mrmudasir1269@gmail.com'];
-      allow delete: if false;
+      allow delete: if isSignedIn() && request.auth.token.email in ['1croresupport@gmail.com', 'mrmudasir1269@gmail.com'];
     }
 
     match /users/{userId} {

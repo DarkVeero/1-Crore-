@@ -554,7 +554,7 @@ fun AuthScreen(
                                         val auth = Firebase.auth
                                         if (mode == AuthMode.LOGIN) {
                                             auth.signInWithEmailAndPassword(cleanEmail, password).await()
-                                            auth.currentUser?.reload()?.await()
+                                            runCatching { auth.currentUser?.reload()?.await() }
                                             auth.currentUser?.uid?.let { signedInUid ->
                                                 AuthFlowStore.markEmailSignIn(context, signedInUid)
                                             }
@@ -795,7 +795,7 @@ fun VerifyEmailScreen(
             if (Firebase.auth.currentUser?.isEmailVerified == true) {
                 onVerified()
             } else {
-                statusMessage = "Email verified. Continuing..."
+                statusMessage = "Email not verified yet — please check your inbox and tap the verification link."
             }
         } catch (e: CancellationException) {
             throw e

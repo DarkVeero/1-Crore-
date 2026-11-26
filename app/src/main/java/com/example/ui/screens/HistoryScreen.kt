@@ -409,7 +409,7 @@ private fun AddPastDateDialog(
     var countInput by remember { mutableStateOf("") }
     val validDate = try {
         val d = LocalDate.parse(dateInput.trim())
-        !d.isAfter(today)
+        !d.isAfter(today) && !d.isBefore(LocalDate.of(2020, 1, 1))
     } catch (_: Exception) {
         false
     }

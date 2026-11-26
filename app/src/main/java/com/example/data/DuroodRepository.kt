@@ -653,7 +653,7 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
                 if (dateKey in pushedManualDateKeys) continue
                 val local = localMapAfterEdits[dateKey]
         if (local != null && local.isManualEdit && local.pendingSync) {
-            pushDayToCloud(uid, local, true, countsCollection.path)
+            pushDayToCloud(uid, local, cloudByDate.containsKey(local.dateKey), countsCollection.path)
             dailyDao.markDaySynced(uid, local.dateKey)
             continue
         }
@@ -1180,7 +1180,7 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
             val parsed = GlobalStatsCache.parseGlobalStatsDocument(
                 exists = snapshot.exists(),
                 data = rawMap,
-                fetchedAtMillis = if (snapshot.metadata.isFromCache) (cached?.fetchedAtMillis ?: nowMillis) else nowMillis
+                fetchedAtMillis = if (snapshot.metadata.isFromCache) (cached?.fetchedAtMillis ?: 1L) else nowMillis
             )
             when {
                 parsed != null -> {
@@ -1334,7 +1334,7 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
             val parsed = GlobalStatsCache.parseGlobalStatsDocument(
                 exists = snapshot.exists(),
                 data = rawMap,
-                fetchedAtMillis = if (snapshot.metadata.isFromCache) (GlobalStatsCache.getCached(context)?.fetchedAtMillis ?: nowMillis) else nowMillis
+                fetchedAtMillis = if (snapshot.metadata.isFromCache) (GlobalStatsCache.getCached(context)?.fetchedAtMillis ?: 1L) else nowMillis
             )
             if (parsed != null) {
                 GlobalStatsCache.saveCached(context, parsed)
@@ -1598,7 +1598,7 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
         }.onFailure { err ->
             Log.i(
                 ANNOUNCEMENT_LOG_TAG,
-                "Scheduled announcement ${item.id} queued locally (cloud write deferred to Admin trigger: ${err.message})"
+                "cloud write failed: ${err.message}"
             )
         }
                 val writeError = cloudWrite.exceptionOrNull()

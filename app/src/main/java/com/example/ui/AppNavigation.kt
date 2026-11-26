@@ -690,7 +690,6 @@ internal fun MainTabScaffold(
                             },
                             onOpenStats = { navigateToTab(AppTab.STATS.route) },
                             onOpenGroups = {
-                                viewModel.refreshGroupsHubOnce()
                                 navController.navigate(ROUTE_GROUPS)
                             },
                             onDismissMilestoneBadge = viewModel::dismissMilestoneBadgeCelebration,
