@@ -65,8 +65,7 @@ object NetworkMonitor {
             }
 
             override fun onLost(network: Network) {
-            val caps = cm.getNetworkCapabilities(network)
-            trySend(if (caps != null) hasInternet(caps) else isActiveNetworkOnline(cm))
+                trySend(false)
             }
 
             override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
