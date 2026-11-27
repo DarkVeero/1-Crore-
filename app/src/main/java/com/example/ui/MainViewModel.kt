@@ -2146,12 +2146,27 @@ class MainViewModel(
         val readyFile = downloadedApkFile
         if (state.pendingInstallReady && readyFile != null && readyFile.exists()) {
             if (AppUpdateManager.canInstallPackages(appContext)) {
-                triggerSync(silent = true)
-            val launched = AppUpdateManager.launchApkInstaller(appContext, readyFile)
-                if (!launched) {
-                    updateStateFlow.value = state.copy(
-                        errorMessage = "Could not open the Android installer. Please try again."
-                    )
+                // R4-D-U5: the old code fired triggerSync (async, un-awaited) and
+                // opened the installer on the next line, so the install could
+                // replace the app before the counts reached the cloud. Await
+                // the pre-install sync first (5s timeout), like onResumeInstallCheck.
+                viewModelScope.launch {
+                    if (NetworkMonitor.isCurrentlyOnline(appContext)) {
+                        isSyncingFlow.value = true
+                        try {
+                            withTimeoutOrNull(5_000L) {
+                                runCatching { repository.syncWithCloud() }
+                            }
+                        } finally {
+                            isSyncingFlow.value = false
+                        }
+                    }
+                    val launched = AppUpdateManager.launchApkInstaller(appContext, readyFile)
+                    if (!launched) {
+                        updateStateFlow.value = state.copy(
+                            errorMessage = "Could not open the Android installer. Please try again."
+                        )
+                    }
                 }
             } else {
                 updateStateFlow.value = state.copy(
