@@ -512,15 +512,31 @@ object FloatingCounterManager {
                 ?: memberName?.takeIf { it.isNotBlank() }
                 ?: "Friend"
 
-            val adjustResult = GroupRepository.adjustMainGroupCount(
-                context = appContext,
-                userId = userId,
-                displayName = displayName,
-                groupId = groupId,
-                delta = 1L,
-                todayDateKey = todayKey,
-                pushToCloud = false
-            )
+            // R3-P2-28: dispatch the tap by group type. Custom-zikr groups
+            // have their own adjust path (incrementCustomZikrGroup) with its
+            // own timestamp handling; routing them through the Main-Durood
+            // adjust bypassed it.
+            val adjustResult = if (existingGroup.type == GroupType.CUSTOM_ZIKR) {
+                GroupRepository.incrementCustomZikrGroup(
+                    context = appContext,
+                    userId = userId,
+                    displayName = displayName,
+                    groupId = groupId,
+                    delta = 1L,
+                    todayDateKey = todayKey,
+                    pushToCloud = false
+                )
+            } else {
+                GroupRepository.adjustMainGroupCount(
+                    context = appContext,
+                    userId = userId,
+                    displayName = displayName,
+                    groupId = groupId,
+                    delta = 1L,
+                    todayDateKey = todayKey,
+                    pushToCloud = false
+                )
+            }
 
             // R3-P2-17(b): a failed adjust must not bump the session count or
             // pulse as if the tap counted — return the last good total with

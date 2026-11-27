@@ -70,6 +70,19 @@ class OneCroreWidgetProvider : AppWidgetProvider() {
                 FloatingCounterManager.stopFloatingButton(appContext)
                 return false
             }
+            // R3-P2-27: never start the pill before any sign-in — taps made
+            // under the fallback id were orphaned on sign-in. Open the app
+            // instead so the user can sign in first.
+            if (!WidgetAndFloatingBridge.hasRealUserId(appContext)) {
+                val launchIntent = Intent(appContext, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP
+                }
+                runCatching { appContext.startActivity(launchIntent) }
+                updateAllWidgetsState(appContext)
+                return false
+            }
             return if (FloatingCounterManager.canDrawOverlays(appContext)) {
                 FloatingCounterManager.startFloatingButton(appContext)
             } else {

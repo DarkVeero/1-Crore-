@@ -24,6 +24,10 @@ data class WidgetCountsSnapshot(
  */
 object WidgetAndFloatingBridge {
     const val BATCH_SYNC_TAP_THRESHOLD = 100L
+    // R3-P2-27: the fallback id for taps made before any sign-in. Counts
+    // written under it were orphaned on sign-in (nothing migrates them), so
+    // the write paths refuse to count under it — see incrementCountAndSync.
+    const val FALLBACK_USER_ID = "local_default_user"
     private const val PREFS_NAME = "one_crore_widget_floating_prefs"
     private const val KEY_ACTIVE_USER_ID = "active_user_id"
     private const val KEY_CACHED_TODAY_COUNT = "cached_today_count"
@@ -107,7 +111,14 @@ object WidgetAndFloatingBridge {
             setActiveUserId(context, latestFromDb)
             return latestFromDb
         }
-        return "local_default_user"
+        return FALLBACK_USER_ID
+    }
+
+    /** Synchronous check for a real signed-in/stored user (no DB read). */
+    fun hasRealUserId(context: Context): Boolean {
+        val appContext = context.applicationContext
+        if (!getStoredActiveUserId(appContext).isNullOrBlank()) return true
+        return runCatching { Firebase.auth.currentUser?.uid }.getOrNull()?.isNotBlank() == true
     }
 
     suspend fun readCountsFromDatabase(
@@ -138,6 +149,12 @@ object WidgetAndFloatingBridge {
     ): WidgetCountsSnapshot {
         val appContext = context.applicationContext
         val userId = resolveUserId(appContext, db, userIdOverride)
+        // R3-P2-27: never count under the fallback id — those taps were
+        // orphaned on sign-in. Refuse the write (and the sync queue) and
+        // return an empty snapshot; the user must sign in first.
+        if (userId == FALLBACK_USER_ID) {
+            return WidgetCountsSnapshot(userId = userId, todayCount = 0L, totalCount = 0L)
+        }
         val dailyDao = db.dailyCountDao()
         if (delta > 0L) {
             dailyDao.incrementDay(
