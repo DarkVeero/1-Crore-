@@ -1,6 +1,7 @@
 package com.example.announcements
 
 import android.content.Context
+import android.content.SharedPreferences
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Instant
@@ -526,14 +527,45 @@ object AnnouncementScheduleStore {
     private const val PREFS_NAME = "one_crore_scheduled_announcements_prefs"
     private const val KEY_ITEMS = "scheduled_announcement_items"
     private const val KEY_DISPATCHED_PUSH_IDS = "dispatched_push_announcement_ids"
+    // R3-P2-44: the store is a SharedPreferences JSON array — bound it, or every
+    // announcement ever received lives here forever.
+    private const val MAX_STORED_ANNOUNCEMENTS = 50
+
+    private fun writeItems(prefs: SharedPreferences, items: List<AnnouncementItem>) {
+        val arr = JSONArray()
+        items.forEach { arr.put(it.toJsonObject()) }
+        prefs.edit().putString(KEY_ITEMS, arr.toString()).apply()
+    }
+
+    private fun pruneDispatchedIds(prefs: SharedPreferences, liveIds: Set<String>) {
+        val current = prefs.getStringSet(KEY_DISPATCHED_PUSH_IDS, emptySet()) ?: emptySet()
+        val kept = current.intersect(liveIds)
+        if (kept.size != current.size) {
+            prefs.edit().putStringSet(KEY_DISPATCHED_PUSH_IDS, kept).apply()
+        }
+    }
 
     fun saveAnnouncement(context: Context, item: AnnouncementItem) {
         val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val existing = getAllAnnouncements(context).filterNot { it.id == item.id }
-        val updated = existing + item
-        val arr = JSONArray()
-        updated.forEach { arr.put(it.toJsonObject()) }
-        prefs.edit().putString(KEY_ITEMS, arr.toString()).apply()
+        val nowMillis = System.currentTimeMillis()
+        val updated = (getAllAnnouncements(context).filterNot { it.id == item.id }
+            // Drop items whose window already ended — they can never show again.
+            .filter { it.endAtMillis >= nowMillis } + item)
+            .sortedByDescending { it.effectiveStartAtMillis }
+            .take(MAX_STORED_ANNOUNCEMENTS)
+        writeItems(prefs, updated)
+        pruneDispatchedIds(prefs, updated.map { it.id }.toSet())
+    }
+
+    /** Deletes announcements whose window already ended. Returns how many were removed. */
+    fun deleteExpiredAnnouncements(context: Context, nowMillis: Long = System.currentTimeMillis()): Int {
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val all = getAllAnnouncements(context)
+        val kept = all.filter { it.endAtMillis >= nowMillis }
+        if (kept.size == all.size) return 0
+        writeItems(prefs, kept)
+        pruneDispatchedIds(prefs, kept.map { it.id }.toSet())
+        return all.size - kept.size
     }
 
     fun getAllAnnouncements(context: Context): List<AnnouncementItem> {

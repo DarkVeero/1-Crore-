@@ -257,7 +257,11 @@ object AnnouncementNotificationHelper {
         audienceContextOverride: AnnouncementAudienceContext? = null
     ): Boolean {
         val appContext = context.applicationContext
-        AnnouncementScheduleStore.saveAnnouncement(appContext, item)
+        // R4-D6: do NOT save the announcement before the decision. Saving first
+        // persisted announcements that were never eligible (wrong audience) or
+        // already done (milestone), so they lingered in the store and could be
+        // re-dispatched later when eligibility changed. The future path saves
+        // via scheduleOrDispatchAnnouncement; the show path saves below.
         if (item.isScheduledForFuture(nowMillis)) {
             AnnouncementScheduledDispatcher.scheduleOrDispatchAnnouncement(
                 context = appContext,
@@ -298,6 +302,9 @@ object AnnouncementNotificationHelper {
             return false
         }
 
+        // R4-D6: only now — the announcement passed every check and is about
+        // to be shown — does it belong in the store.
+        AnnouncementScheduleStore.saveAnnouncement(appContext, item)
         AnnouncementScheduleStore.markPushDispatched(appContext, item.id)
         val shown = showAnnouncementPushNotification(
             context = appContext,

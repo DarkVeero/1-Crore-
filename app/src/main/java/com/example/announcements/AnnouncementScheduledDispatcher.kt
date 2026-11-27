@@ -79,6 +79,9 @@ object AnnouncementScheduledDispatcher {
         nowMillis: Long = System.currentTimeMillis()
     ) {
         val appContext = context.applicationContext
+        // R3-P2-44: drop announcements whose window already ended, so the
+        // store does not keep dead items across restarts.
+        AnnouncementScheduleStore.deleteExpiredAnnouncements(appContext, nowMillis)
         val all = AnnouncementScheduleStore.getAllAnnouncements(appContext)
         for (item in all) {
             if (AnnouncementScheduleStore.wasPushDispatched(appContext, item.id)) continue
