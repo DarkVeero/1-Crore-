@@ -881,15 +881,24 @@ object GroupRepository {
     /**
      * Pushes a single group's current member stats for [userId] via atomic Firestore transaction.
      */
+    /**
+     * Pushes one member's group stats to the cloud. Returns true when the stats
+     * are pushed — or when there is nothing to push (missing group/member, which
+     * the caller treats as done, same as flushDirtyGroupsToCloud). Returns false
+     * on failure so the caller keeps the dirty flag and retries later.
+     * Round 1 P2-1: the old Unit return discarded the upsert result, so the
+     * batch sync cleared the dirty flag before pushing and a failed push was
+     * never retried.
+     */
     suspend fun pushGroupMemberSnapshotToCloud(
         context: Context,
         userId: String,
         groupId: String
-    ) {
-        if (userId.isBlank() || groupId.isBlank()) return
-        val group = getGroupById(context, groupId) ?: return
-        val member = group.members.firstOrNull { it.userId == userId } ?: return
-        upsertMemberStatsTransactionBestEffort(context, group.id, member)
+    ): Boolean {
+        if (userId.isBlank() || groupId.isBlank()) return true
+        val group = getGroupById(context, groupId) ?: return true
+        val member = group.members.firstOrNull { it.userId == userId } ?: return true
+        return upsertMemberStatsTransactionBestEffort(context, group.id, member)
     }
 
     private fun currentWeekKey(today: LocalDate = LocalDate.now()): String {

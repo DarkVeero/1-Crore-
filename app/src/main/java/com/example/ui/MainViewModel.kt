@@ -2486,9 +2486,14 @@ class MainViewModel(
     private suspend fun pushDirtyGroupStatsDuringBatchSync() {
         val groupIds = (dirtyGroupSyncIds + GroupRepository.getDirtyGroupSyncIds(appContext)).distinct()
         groupIds.forEach { dirtyGroupId ->
-            dirtyGroupSyncIds.remove(dirtyGroupId)
-            GroupRepository.clearGroupDirtyForSync(appContext, dirtyGroupId)
-            GroupRepository.pushGroupMemberSnapshotToCloud(appContext, currentUserId, dirtyGroupId)
+            // Round 1 P2-1: push FIRST, clear the dirty flag only on success.
+            // The old code cleared before pushing and discarded the result, so
+            // a failed stats push was never retried via the dirty set.
+            val pushed = GroupRepository.pushGroupMemberSnapshotToCloud(appContext, currentUserId, dirtyGroupId)
+            if (pushed) {
+                dirtyGroupSyncIds.remove(dirtyGroupId)
+                GroupRepository.clearGroupDirtyForSync(appContext, dirtyGroupId)
+            }
         }
     }
 
