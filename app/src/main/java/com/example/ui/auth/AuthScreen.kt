@@ -776,7 +776,7 @@ fun VerifyEmailScreen(
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            // Silent retry on next 3-second tick or foreground resume
+            // Silent retry on next tick or foreground resume
         }
     }
 
@@ -839,11 +839,22 @@ fun VerifyEmailScreen(
         }
     }
 
-    // Backup auto-check every 3 seconds while the waiting screen is open
+    // Backup auto-check while the waiting screen is open — capped and
+    // backed off (R3-P2-40): the old loop hit Firebase with a reload()
+    // every 3 s forever. Now it checks often at first (3 s, 5 s, 10 s),
+    // then every 30 s, and stops after ~5 minutes. The ON_RESUME check
+    // below still covers the return-from-email case after polling stops.
     LaunchedEffect(email) {
-        while (true) {
-            delay(3000L)
+        val startedAtMillis = System.currentTimeMillis()
+        var delayMillis = 3000L
+        while (System.currentTimeMillis() - startedAtMillis < 300_000L) {
+            delay(delayMillis)
             checkVerificationSilently()
+            delayMillis = when {
+                delayMillis < 5000L -> 5000L
+                delayMillis < 10000L -> 10000L
+                else -> 30000L
+            }
         }
     }
 

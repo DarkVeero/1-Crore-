@@ -83,21 +83,27 @@ object AnnouncementScheduledDispatcher {
         // store does not keep dead items across restarts.
         AnnouncementScheduleStore.deleteExpiredAnnouncements(appContext, nowMillis)
         val all = AnnouncementScheduleStore.getAllAnnouncements(appContext)
+        var hasDue = false
         for (item in all) {
             if (AnnouncementScheduleStore.wasPushDispatched(appContext, item.id)) continue
             if (nowMillis > item.endAtMillis) continue
             val triggerAt = item.effectiveStartAtMillis
             if (triggerAt <= nowMillis) {
-                scope.launch {
-                    dispatchDueAnnouncements(
-                        context = appContext,
-                        nowMillis = nowMillis,
-                        specificAnnouncementId = item.id
-                    )
-                }
+                hasDue = true
             } else {
                 // R4-D1: exactly ONE trigger — the AlarmManager alarm (see above).
                 scheduleAlarmManagerTrigger(appContext, item.id, triggerAt)
+            }
+        }
+        // R3-P2-43: ONE dispatch run for all due items, not one coroutine
+        // per item. The per-item launches each re-read the whole DB and
+        // raced on the dispatched flag, so two runs could both post and
+        // double-count against the daily cap. A single call iterates the due
+        // candidates in order, with one audience resolution and sequential
+        // cap accounting.
+        if (hasDue) {
+            scope.launch {
+                dispatchDueAnnouncements(context = appContext, nowMillis = nowMillis)
             }
         }
     }
@@ -230,11 +236,13 @@ object AnnouncementScheduledDispatcher {
                     audienceContext = audienceContext
                 )
             ) {
-                AnnouncementScheduleStore.markPushDispatched(appContext, item.id)
+                // R3-P2-38: do NOT mark dispatched on eligibility failure —
+                // the reason is often transient (daily cap, 10-min gap), and
+                // marking here lost the push forever. The item stays due and
+                // is re-evaluated on the next cycle.
                 continue
             }
 
-            AnnouncementScheduleStore.markPushDispatched(appContext, item.id)
             val posted = AnnouncementNotificationHelper.showAnnouncementPushNotification(
                 context = appContext,
                 title = item.title,
@@ -244,6 +252,10 @@ object AnnouncementScheduledDispatcher {
                 isUrgent = item.isUrgent
             )
             if (posted) {
+                // R3-P2-38: mark dispatched only once the push was actually
+                // posted — a failed post (e.g. permission denied) must not
+                // consume the announcement.
+                AnnouncementScheduleStore.markPushDispatched(appContext, item.id)
                 if (!item.isUrgent) {
                     AnnouncementFrequencyStore.recordPushSent(appContext, userId, nowMillis)
                 }

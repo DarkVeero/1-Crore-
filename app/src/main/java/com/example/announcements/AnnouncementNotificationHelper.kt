@@ -332,14 +332,17 @@ object AnnouncementNotificationHelper {
                 audienceContext = resolvedAudience
             )
         ) {
-            AnnouncementScheduleStore.markPushDispatched(appContext, item.id)
+            // R3-P2-38: do NOT mark dispatched on eligibility failure — the
+            // reason is often transient (daily cap, 10-min gap). Marking here
+            // lost the push forever when notification permission was later
+            // granted or the cap reset. The item is not in the store on this
+            // path, so nothing re-dispatches it spuriously.
             return false
         }
 
         // R4-D6: only now — the announcement passed every check and is about
         // to be shown — does it belong in the store.
         AnnouncementScheduleStore.saveAnnouncement(appContext, item)
-        AnnouncementScheduleStore.markPushDispatched(appContext, item.id)
         val shown = showAnnouncementPushNotification(
             context = appContext,
             title = item.title,
@@ -349,6 +352,10 @@ object AnnouncementNotificationHelper {
             isUrgent = item.isUrgent
         )
         if (shown) {
+            // R3-P2-38: mark dispatched only once the push was actually
+            // posted — a failed post (e.g. permission denied) must not
+            // consume the announcement.
+            AnnouncementScheduleStore.markPushDispatched(appContext, item.id)
             if (!item.isUrgent) {
                 AnnouncementFrequencyStore.recordPushSent(appContext, resolvedUserId, nowMillis)
             }

@@ -449,6 +449,12 @@ object ReminderScheduler {
         val appContext = context.applicationContext
         val db = dbOverride ?: AppDatabase.getInstance(appContext)
         val uid = resolveReminderUserId(appContext, db) ?: return@withLock false
+        // R3-P2-39: a surviving alarm/WorkManager run must not remind a
+        // logged-out or deleted user. cancelAll is the only defence today,
+        // and it can fail part-way (or a run can already be in flight), so
+        // the reminder itself checks the signed-in account matches the
+        // resolved uid before doing anything.
+        if (Firebase.auth.currentUser?.uid != uid) return@withLock false
         val profile = db.userProfileDao().getProfile(uid)
         val savedCfg = getSavedScheduleConfig(appContext)
 
