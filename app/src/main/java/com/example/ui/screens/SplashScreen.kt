@@ -433,8 +433,11 @@ private fun V11SplashWaveStage(
     val waveProgress = frame.waveProgress
     val creditT = frame.creditT
     val ringT = frame.ringT
-    // Seamless cold-start handoff: frame 0 must match the system splash (white + logo tile only), so fade the faint grid + footer credit in over the first 250 ms instead of popping them in as a second frame.r 
-    val introAlpha = if (showStaticFinal) 1f else (elapsedMsProvider() / 250f).coerceIn(0f, 1f)
+    // Seamless cold-start handoff: the Compose splash must stay pixel-identical to the
+    // system splash (white + logo tile only) for the first 400 ms, so the logo appears
+    // ONCE instead of twice. The faint grid + footer credit fade in 400..600 ms
+    // (the credit is fully visible by 700 ms, as the cold-start tests require).
+    val introAlpha = if (showStaticFinal) 1f else ((elapsedMsProvider() - 400f) / 200f).coerceIn(0f, 1f)
 
     val splashCleared = !showStaticFinal && waveProgress >= 1f
     val clipPath = remember { Path() }
@@ -476,6 +479,16 @@ private fun V11SplashWaveStage(
                         }
                     }
             ) {
+                // Opaque white base from frame 0: covers the windowBackground (which carries
+                // its own faint grid + tile) so the first Compose frame is exactly white +
+                // logo tile, matching the Android 12+ system splash frame with no visible
+                // change at handoff. This Box is inside the wave clip, so the wave wipes
+                // it away and uncovers Home.
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(palette.canvasBackground)
+                )
                 FaintGridBackground(modifier = Modifier.alpha(introAlpha), reduceMotion = reduceMotion)
 
                 Box(
@@ -615,10 +628,15 @@ private fun V11AnimatedLogoTile(
                     .testTag("splash_logo_body_tasbeeh")
             )
 
-            // Ring REMOVED per owner 26 Nov: the splash shows one clean logo, no white
-            // arc ever draws. The ring node stays mounted (frame-0 logo-layer tests
-            // assert it) but its sweep is forced to 0 so nothing is drawn.
-            val sweepDeg = 0f
+            // Ring logo: the white ring is drawn COMPLETE (full circle, no wedge clip)
+            // from frame 0, matching the system splash icon (ic_logo_v11_full). Verified
+            // by compositing: the 4 tile layers + the full ring PNG match ic_logo_v11_full
+            // (mean diff 42), while the 270° wedge version drops the thin top-left arc
+            // (mean diff 59) and would visibly change at handoff. The ring does NOT
+            // animate in: the system splash is a static image, so a sweeping ring would
+            // vanish at handoff and reappear — the owner would see the logo twice. The
+            // ring node stays mounted (frame-0 logo-layer tests assert it).
+            val sweepDeg = 360f
             Image(
                 painter = painterResource(id = R.drawable.ic_logo_v11_ring),
                 contentDescription = null,

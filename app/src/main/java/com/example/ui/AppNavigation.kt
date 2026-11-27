@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.History
@@ -28,7 +27,6 @@ import androidx.compose.material.icons.outlined.RadioButtonChecked
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -50,7 +48,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathFillType
@@ -60,7 +57,6 @@ import androidx.compose.ui.graphics.vector.PathNode
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.credentials.CredentialManager
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -143,8 +139,14 @@ internal fun resolveRootTabNavigationSpec(targetRoute: String): TabNavigationSpe
     )
 }
 
-// ⌬ (U+2332) as a custom tab icon, traced from the Noto Sans Symbols glyph so it
-// renders exactly like the symbol. Default size 24.dp, the same as the other tab icons.
+// ⌬ (U+2332) as a custom tab icon. This is the Noto Sans Symbols glyph redrawn for
+// legibility at 24.dp: the faithful trace read as a solid triangle (paper plane)
+// because its outline was thick and its hollow interior + bar vanished at small
+// sizes. Here the outline is thin (2u), the hollow interior is large, and the
+// horizontal bar is thick (3u) and clearly visible, so it reads unambiguously as
+// the taper symbol at tab size. A font glyph is NOT used: the app font (Inter)
+// does not contain U+2332, so a text glyph depends on device font fallback and
+// did not render on the owner's phone. Default size 24.dp, same as the other tabs.
 private val TaperIcon: ImageVector = ImageVector.Builder(
     name = "Taper",
     defaultWidth = 24.dp,
@@ -153,21 +155,20 @@ private val TaperIcon: ImageVector = ImageVector.Builder(
     viewportHeight = 24f
 ).addPath(
     pathData = listOf(
-        // Outer triangle.
-        PathNode.MoveTo(0f, 22.66f),
-        PathNode.LineTo(0f, 1.34f),
-        PathNode.LineTo(24f, 11.5f),
-        PathNode.LineTo(24f, 12.5f),
+        // Outer triangle (right-pointing).
+        PathNode.MoveTo(1.5f, 2.5f),
+        PathNode.LineTo(1.5f, 21.5f),
+        PathNode.LineTo(21.5f, 12f),
         PathNode.Close,
-        // Upper inner triangle (hole).
-        PathNode.MoveTo(2.21f, 10.91f),
-        PathNode.LineTo(17.36f, 10.91f),
-        PathNode.LineTo(2.21f, 4.43f),
+        // Upper hollow region.
+        PathNode.MoveTo(3.5f, 4.5f),
+        PathNode.LineTo(18f, 10.5f),
+        PathNode.LineTo(3.5f, 10.5f),
         PathNode.Close,
-        // Lower inner triangle (hole).
-        PathNode.MoveTo(2.21f, 19.57f),
-        PathNode.LineTo(17.42f, 13.06f),
-        PathNode.LineTo(2.21f, 13.06f),
+        // Lower hollow region (leaves the 3u horizontal bar between the two holes).
+        PathNode.MoveTo(3.5f, 19.5f),
+        PathNode.LineTo(18f, 13.5f),
+        PathNode.LineTo(3.5f, 13.5f),
         PathNode.Close
     ),
     pathFillType = PathFillType.EvenOdd,
@@ -187,32 +188,15 @@ internal enum class AppTab(
     SETTINGS("settings", "Settings", TaperIcon, TaperIcon)
 }
 
-// Settings tab icon: the ACTUAL ⌬ glyph (U+2332) rendered as text, so it reads as
-// the symbol the owner typed. The traced TaperIcon outline read as a paper plane
-// because its bar vanished at 24dp. 28.sp in a 24.dp box: the glyph ink matches
-// the other 24.dp tab icons (hollow triangle + clearly visible bar).
-// TaperIcon is kept only to satisfy AppTab's ImageVector fields; it is not drawn.
+// Settings tab icon is the TaperIcon vector above (clarified ⌬); it is drawn with
+// Icon like every other tab so the NavigationBar/Rail tint (selected/unselected)
+// applies the same way. No text glyph is used here.
 @Composable
 private fun TabIcon(tab: AppTab, selected: Boolean) {
-    if (tab == AppTab.SETTINGS) {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier.size(24.dp)
-        ) {
-            Text(
-                text = "\u2332",
-                fontSize = 28.sp,
-                lineHeight = 24.sp,
-                color = LocalContentColor.current,
-                maxLines = 1
-            )
-        }
-    } else {
-        Icon(
-            imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
-            contentDescription = tab.label
-        )
-    }
+    Icon(
+        imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
+        contentDescription = tab.label
+    )
 }
 
 @Composable
