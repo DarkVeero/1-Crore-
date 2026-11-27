@@ -1852,6 +1852,39 @@ object GroupRepository {
         )
     }
 
+    // Round 1 P1-3: backup boundary. The backup file carries groups as the
+    // same JSON the registry uses, so a backup restores groups that clear
+    // app data would otherwise destroy forever.
+    fun encodeGroupForBackup(group: GroupItem): JSONObject = encodeGroupJson(group)
+
+    fun decodeGroupFromBackup(obj: JSONObject): GroupItem? = decodeGroupJson(obj)
+
+    /**
+     * Merges backup groups into the local registry. Union by id; for ids
+     * present on both sides the newer updatedAtMillis wins (same maxOf
+     * spirit as the counts restore). Skips groups the user deleted locally
+     * (never resurrect a deleted group) and groups the user is not a member
+     * of. Returns how many groups were written. Restored groups carry no
+     * pending cloud flags — groups are local-only until groups sync ships.
+     */
+    fun restoreGroupsFromBackup(context: Context, userId: String, backupGroups: List<GroupItem>): Int {
+        if (userId.isBlank() || backupGroups.isEmpty()) return 0
+        val all = readAllGroups(context)
+        val deletedIds = readStringSet(context, KEY_DELETED_GROUP_IDS)
+        var restored = 0
+        backupGroups.forEach { backup ->
+            if (backup.id in deletedIds) return@forEach
+            if (backup.members.none { it.userId == userId }) return@forEach
+            val local = all[backup.id]
+            if (local == null || backup.updatedAtMillis > local.updatedAtMillis) {
+                all[backup.id] = backup
+                restored++
+            }
+        }
+        if (restored > 0) writeAllGroups(context, all)
+        return restored
+    }
+
     fun resetForTest(context: Context) {
         lastSharedInviteMessageForTest = null
         activeGroupListenersForTest.set(0)

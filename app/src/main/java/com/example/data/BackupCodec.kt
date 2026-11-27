@@ -31,7 +31,12 @@ data class BackupPayload(
     val droppedCounters: Int = 0,
     val dayUpdatedAtMillis: Map<String, Long> = emptyMap(),
     // R4-C9: the daily target in force on each day, so a restore keeps each day's own target.
-    val dayDailyTargets: Map<String, Int> = emptyMap()
+    val dayDailyTargets: Map<String, Int> = emptyMap(),
+    // Round 1 P1-3: groups ride along as raw JSON (GroupItem encode/decode
+    // lives in GroupRepository, so this codec stays free of the groups
+    // package). Absent in old backups — decode tolerates that.
+    val groups: List<JSONObject> = emptyList(),
+    val droppedGroups: Int = 0
 )
 
 object BackupCodec {
@@ -51,7 +56,11 @@ object BackupCodec {
     fun encode(
         profile: UserProfileEntity?,
         days: List<DailyCountEntity>,
-        customCounters: List<CustomCounterEntity> = emptyList()
+        customCounters: List<CustomCounterEntity> = emptyList(),
+        // Round 1 P1-3: groups previously never reached a backup — clear app
+        // data meant groups gone forever. Callers pass the user's groups as
+        // raw JSON (GroupRepository.encodeGroupForBackup).
+        groups: List<JSONObject> = emptyList()
     ): String {
         val root = JSONObject().apply {
             put("app", "1 Crore")
@@ -96,6 +105,15 @@ object BackupCodec {
                 })
             }
             put("customCounters", countersArr)
+
+            // Round 1 P1-3: groups are local-only (no cloud sync), so the
+            // backup is their only durability. Stored verbatim as the same
+            // JSON the groups registry uses.
+            if (groups.isNotEmpty()) {
+                val groupsArr = JSONArray()
+                groups.forEach { groupsArr.put(it) }
+                put("groups", groupsArr)
+            }
         }
         return root.toString(2)
     }
@@ -142,6 +160,18 @@ object BackupCodec {
                 }
             }
         }
+        // Round 1 P1-3: groups arrive as raw JSON; only shape-checked here
+        // (object with a plausible id). GroupRepository decodes them into
+        // GroupItems at restore time and drops anything it cannot parse.
+        val groupsArr = root.optJSONArray("groups") ?: JSONArray()
+        val groups = buildList {
+            for (i in 0 until groupsArr.length()) {
+                val item = groupsArr.optJSONObject(i) ?: continue
+                if (idRegex.matches(item.optString("id", "").trim())) {
+                    add(item)
+                }
+            }
+        }
         return BackupPayload(
             displayName = profileObj?.optString("displayName")?.takeIf { it.isNotBlank() },
             dailyTarget = profileObj?.optInt("dailyTarget", 0)?.takeIf { it in 1..10_000_000 },
@@ -159,6 +189,8 @@ object BackupCodec {
             customCounters = counters,
         droppedDays = arr.length() - days.size,
         droppedCounters = countersArr.length() - counters.size,
+        groups = groups,
+        droppedGroups = groupsArr.length() - groups.size,
             themeMode = profileObj?.optString("themeMode")?.takeIf { it.isNotBlank() }?.let {
                 com.example.ui.theme.AppThemeMode.fromStorageKey(it).storageKey
             },
@@ -178,6 +210,7 @@ object BackupCodec {
             val hasRecognizedStructure = root.has("dailyCounts") ||
                 root.has("profile") ||
                 root.has("customCounters") ||
+                root.has("groups") ||
                 root.optString("app") == "1 Crore"
             if (!hasRecognizedStructure) {
                 return Result.failure(IllegalArgumentException("Unrecognized backup format."))
@@ -214,9 +247,15 @@ object BackupCodec {
                     currentCount = c.currentCount
                 )
             }
-            val reEncoded = encode(syntheticProfile, syntheticDays, syntheticCounters)
+            val reEncoded = encode(syntheticProfile, syntheticDays, syntheticCounters, firstPass.groups)
             val secondPass = decode(reEncoded)
 
+            // Round 1 P1-3: groups must survive the round-trip too (compared
+            // as sorted JSON strings — order is preserved, but the comparison
+            // should not depend on it).
+            if (firstPass.groups.map { it.toString() }.sorted() != secondPass.groups.map { it.toString() }.sorted()) {
+                return Result.failure(IllegalStateException("Backup restore-test gate failed: groups mismatch."))
+            }
             if (firstPass.days.sortedBy { it.first } != secondPass.days.sortedBy { it.first }) {
                 return Result.failure(IllegalStateException("Backup restore-test gate failed: daily counts mismatch."))
             }

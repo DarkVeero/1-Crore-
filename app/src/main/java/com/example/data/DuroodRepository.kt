@@ -29,6 +29,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeoutOrNull
+import org.json.JSONObject
 import java.time.LocalDate
 import java.util.UUID
 import java.util.concurrent.TimeoutException
@@ -382,17 +383,30 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
         )
     }
 
-    suspend fun exportBackupJson(userId: String): String {
+    suspend fun exportBackupJson(
+        userId: String,
+        // Round 1 P1-3: groups as raw JSON (GroupRepository.encodeGroupForBackup).
+        // The caller (MainViewModel) supplies them; the repository stays free
+        // of the groups store.
+        groupJson: List<JSONObject> = emptyList()
+    ): String {
         val profile = profileDao.getProfile(userId)
         val days = dailyDao.getAllDays(userId)
         val counters = customDao.getActiveCounters(userId)
-        val encoded = BackupCodec.encode(profile, days, counters)
+        val encoded = BackupCodec.encode(profile, days, counters, groupJson)
         // Restore-test gate on export: guarantee exported backup is valid and round-trip restorable
         BackupCodec.verifyBackupRoundTrip(encoded).getOrThrow()
         return encoded
     }
 
-    data class RestoreOutcome(val restoredItems: Int, val skippedEntries: Int)
+    // Round 1 P1-3: groupsJson carries the backup's groups as raw JSON — the
+    // caller (MainViewModel) decodes them via GroupRepository and merges them
+    // into the groups store, since this repository owns no groups context.
+    data class RestoreOutcome(
+        val restoredItems: Int,
+        val skippedEntries: Int,
+        val groupsJson: List<JSONObject> = emptyList()
+    )
 
     suspend fun restoreBackupJson(userId: String, jsonText: String): Result<RestoreOutcome> {
         return try {
@@ -516,7 +530,13 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
                 }
             }
 
-            Result.success(RestoreOutcome(restoredItems, payload.droppedDays + payload.droppedCounters))
+            Result.success(
+                RestoreOutcome(
+                    restoredItems = restoredItems,
+                    skippedEntries = payload.droppedDays + payload.droppedCounters + payload.droppedGroups,
+                    groupsJson = payload.groups
+                )
+            )
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

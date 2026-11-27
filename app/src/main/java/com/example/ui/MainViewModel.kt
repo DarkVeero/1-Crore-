@@ -1134,12 +1134,31 @@ class MainViewModel(
         }
     }
 
-    suspend fun exportBackupJson(): String = repository.exportBackupJson(currentUserId)
+    suspend fun exportBackupJson(): String {
+        // Round 1 P1-3: groups are local-only, so the backup is their only
+        // durability — include the user's groups as registry JSON.
+        val groupJson = GroupRepository.getGroupsForUser(appContext, currentUserId)
+            .map { GroupRepository.encodeGroupForBackup(it) }
+        return repository.exportBackupJson(currentUserId, groupJson)
+    }
 
     fun restoreBackupJson(jsonText: String) {
         viewModelScope.launch {
             val result = repository.restoreBackupJson(currentUserId, jsonText)
+            // Round 1 P1-3: merge the backup's groups back into the local
+            // registry (newer updatedAtMillis wins per group; locally deleted
+            // groups are never resurrected).
+            var restoredGroups = 0
             if (result.isSuccess) {
+                val backupGroups = result.getOrNull()?.groupsJson
+                    ?.mapNotNull { GroupRepository.decodeGroupFromBackup(it) }
+                    .orEmpty()
+                if (backupGroups.isNotEmpty()) {
+                    restoredGroups = GroupRepository.restoreGroupsFromBackup(
+                        appContext, currentUserId, backupGroups
+                    )
+                    if (restoredGroups > 0) reloadUserGroupsAndCelebrations()
+                }
                 val profile = repository.getProfileOnce(currentUserId)
                 if (profile != null && profile.setupCompleted) {
                     ReminderScheduler.scheduleReminders(
@@ -1154,7 +1173,12 @@ class MainViewModel(
                 }
             }
             statusMessageFlow.value = result.fold(
-                onSuccess = { outcome -> "Restored ${outcome.restoredItems} records safely (higher local counts preserved)." + if (outcome.skippedEntries > 0) " ${outcome.skippedEntries} entries skipped." else "" },
+                onSuccess = { outcome ->
+                    val totalRestored = outcome.restoredItems + restoredGroups
+                    "Restored $totalRestored records safely (higher local counts preserved)." +
+                        if (restoredGroups > 0) " Includes $restoredGroups group${if (restoredGroups == 1) "" else "s"}." else "" +
+                        if (outcome.skippedEntries > 0) " ${outcome.skippedEntries} entries skipped." else ""
+                },
                 onFailure = { "Invalid backup file." }
             )
             SyncWorker.enqueueWhenOnline(appContext)
