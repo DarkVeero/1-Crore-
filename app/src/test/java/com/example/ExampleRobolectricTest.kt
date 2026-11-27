@@ -8371,21 +8371,58 @@ class ExampleRobolectricTest {
         val windowRefs = collectDrawableRefIds(R.drawable.bg_launch_splash_window)
         assertEquals(listOf(android.R.color.white, R.drawable.bg_launch_logo_tile), windowRefs)
 
-        // 3. Android 12+ system splash icon (ic_splash_transparent) renders opaque white base + the full ring logo at Frame 0
-        // (75e2f69: 144dp ic_logo_v11_full replaces the 4-layer tile; the grid file itself is now a white base — see §4)
-        val systemSplashIcon = androidx.core.content.ContextCompat.getDrawable(context, R.drawable.ic_splash_transparent)
+        // 3. Android 12+ system splash icon is BLANK opaque white (ic_splash_blank) — NO logo.
+        // Phone-verified 27 Nov 2026: Android circle-masks the splash icon, and the v11 ring
+        // sits at 88% of the logo radius, outside the mask — every logo icon rendered as a
+        // big black circle with no ring, then the Compose splash showed the real ring tile,
+        // so the owner saw the logo twice in two shapes. A fully opaque white icon keeps
+        // nonTransparentRatio == 1.0 (no launcher-icon fallback) and is invisible on the
+        // white splash background under any mask, so the ring logo appears EXACTLY ONCE
+        // (Compose splash, 144dp tile). Never put the logo back in the system splash icon.
+        val systemSplashIcon = androidx.core.content.ContextCompat.getDrawable(context, R.drawable.ic_splash_blank)
+        assertNotNull("ic_splash_blank must resolve", systemSplashIcon)
         assertTrue(
-            "ic_splash_transparent must be a LayerDrawable with white base + full logo",
-            systemSplashIcon is android.graphics.drawable.LayerDrawable
+            "ic_splash_blank must be a plain vector with no logo layers (was ${systemSplashIcon?.javaClass?.simpleName})",
+            systemSplashIcon is android.graphics.drawable.VectorDrawable
         )
-        val splashIconLayers = systemSplashIcon as android.graphics.drawable.LayerDrawable
-        assertEquals(2, splashIconLayers.numberOfLayers)
-        assertTrue(
-            "ic_splash_transparent layer 1 must be the full ring logo (ic_logo_v11_full)",
-            splashIconLayers.getDrawable(1) is android.graphics.drawable.BitmapDrawable
+        val splashIconRefs = collectDrawableRefIds(R.drawable.ic_splash_blank)
+        assertEquals("ic_splash_blank must reference no nested drawables", emptyList<Int>(), splashIconRefs)
+        val blankParser = context.resources.getXml(R.drawable.ic_splash_blank)
+        val blankFillColors = mutableListOf<Int>()
+        try {
+            var ev = blankParser.eventType
+            while (ev != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+                if (ev == org.xmlpull.v1.XmlPullParser.START_TAG && blankParser.name == "path") {
+                    val color = blankParser.getAttributeIntValue(
+                        "http://schemas.android.com/apk/res/android",
+                        "fillColor",
+                        0
+                    )
+                    if (color != 0) blankFillColors.add(color)
+                }
+                ev = blankParser.next()
+            }
+        } finally {
+            blankParser.close()
+        }
+        assertEquals(
+            "ic_splash_blank must draw only opaque white",
+            listOf(android.graphics.Color.WHITE),
+            blankFillColors
         )
-        val splashIconRefs = collectDrawableRefIds(R.drawable.ic_splash_transparent)
-        assertEquals(listOf(R.drawable.bg_splash_grid_288, R.drawable.ic_logo_v11_full), splashIconRefs)
+        // The app theme must actually point at the blank icon (values + values-v31).
+        val themeAttrs = context.theme.obtainStyledAttributes(
+            intArrayOf(android.R.attr.windowSplashScreenAnimatedIcon)
+        )
+        try {
+            assertEquals(
+                "windowSplashScreenAnimatedIcon must be ic_splash_blank (a logo there is circle-masked)",
+                R.drawable.ic_splash_blank,
+                themeAttrs.getResourceId(0, 0)
+            )
+        } finally {
+            themeAttrs.recycle()
+        }
 
         // 4. bg_splash_grid_288 must contain NO empty black patch (#FF000000) path; outer grid canvas is opaque #FFFFFFFF
         val gridParser = context.resources.getXml(R.drawable.bg_splash_grid_288)

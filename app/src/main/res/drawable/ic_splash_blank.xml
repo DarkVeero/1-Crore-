@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="288dp"
+    android:height="288dp"
+    android:viewportWidth="288"
+    android:viewportHeight="288">
+
+    <!-- BLANK SYSTEM SPLASH ICON — INTENTIONALLY NO LOGO (phone-verified 27 Nov 2026).
+         Android 12+ circle-masks windowSplashScreenAnimatedIcon: the v11 ring sits at
+         88% of the logo radius, outside the mask, so every logo icon rendered here
+         came out as a big black circle with no ring and no tile — then the Compose
+         splash showed the real ring tile, and the owner saw the logo twice in two
+         different shapes (cold + warm launch, 4 videos). A fully opaque white icon
+         keeps nonTransparentRatio == 1.0 (no fallback to the launcher icon) and is
+         invisible on the white splash background under any mask, so the ring logo
+         appears EXACTLY ONCE — in the Compose splash (144dp tile, white) — then Home.
+         Never put the logo back in this drawable. -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M0,0h288v288h-288z" />
+
+</vector>

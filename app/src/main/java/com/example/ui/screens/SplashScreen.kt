@@ -433,10 +433,11 @@ private fun V11SplashWaveStage(
     val waveProgress = frame.waveProgress
     val creditT = frame.creditT
     val ringT = frame.ringT
-    // Seamless cold-start handoff: the Compose splash must stay pixel-identical to the
-    // system splash (white + logo tile only) for the first 400 ms, so the logo appears
-    // ONCE instead of twice. The faint grid + footer credit fade in 400..600 ms
-    // (the credit is fully visible by 700 ms, as the cold-start tests require).
+    // Cold-start handoff: the Android 12+ system splash is BLANK white by design
+    // (ic_splash_blank — any logo there is circle-masked into a black circle with no
+    // ring, phone-verified 27 Nov 2026), so this Compose tile is the SINGLE logo
+    // appearance. The faint grid + footer credit fade in 400..600 ms (the credit is
+    // fully visible by 700 ms, as the cold-start tests require).
     val introAlpha = if (showStaticFinal) 1f else ((elapsedMsProvider() - 400f) / 200f).coerceIn(0f, 1f)
 
     val splashCleared = !showStaticFinal && waveProgress >= 1f
@@ -479,11 +480,10 @@ private fun V11SplashWaveStage(
                         }
                     }
             ) {
-                // Opaque white base from frame 0: covers the windowBackground (which carries
-                // its own faint grid + tile) so the first Compose frame is exactly white +
-                // logo tile, matching the Android 12+ system splash frame with no visible
-                // change at handoff. This Box is inside the wave clip, so the wave wipes
-                // it away and uncovers Home.
+                // Opaque white base from frame 0: covers the windowBackground so the first
+                // Compose frame is exactly white + logo tile. The system splash frame
+                // before it is blank white, so the tile appears exactly once at handoff.
+                // This Box is inside the wave clip, so the wave wipes it away and uncovers Home.
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -583,9 +583,8 @@ private fun V11AnimatedLogoTile(
     ) {
         if (showStaticFinal) {
             // Static final logo: the SAME complete ring logo as every other frame
-            // (ic_logo_v11_full). The old tile_clean had no ring, so on slow /
-            // low-RAM phones the ring appeared in the system splash and then
-            // vanished in the Compose splash — the logo visibly changed.
+            // (ic_logo_v11_full). The system splash carries no logo at all (blank
+            // white by design), so the ring can never appear-then-vanish across frames.
             Image(
                 painter = painterResource(id = R.drawable.ic_logo_v11_full),
                 contentDescription = "1 Crore v11 logo",
@@ -631,7 +630,7 @@ private fun V11AnimatedLogoTile(
             )
 
             // Ring logo: the white ring is drawn COMPLETE (full circle, no wedge clip)
-            // from frame 0, matching the system splash icon (ic_logo_v11_full). Verified
+            // from frame 0, matching the launch-window tile (bg_launch_logo_tile). Verified
             // by compositing: the 4 tile layers + the full ring PNG match ic_logo_v11_full
             // (mean diff 42), while the 270° wedge version drops the thin top-left arc
             // (mean diff 59) and would visibly change at handoff. The ring does NOT

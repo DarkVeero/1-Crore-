@@ -1662,7 +1662,7 @@ class ExampleUnitTest {
         assertNotEquals(0, R.drawable.bg_launch_splash_window)
         assertNotEquals(0, R.drawable.bg_launch_faint_grid)
         assertNotEquals(0, R.drawable.bg_launch_logo_tile)
-        assertNotEquals(0, R.drawable.ic_splash_transparent)
+        assertNotEquals(0, R.drawable.ic_splash_blank)
         assertNotEquals(0, R.drawable.ic_logo_v11_tile)
         assertNotEquals(0, R.drawable.ic_logo_v11_dot)
         assertNotEquals(0, R.drawable.ic_logo_v11_one)
