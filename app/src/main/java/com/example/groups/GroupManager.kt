@@ -102,6 +102,14 @@ object GroupRepository {
     private const val KEY_GROUP_FLOATING_UNSYNCED_TAPS = "group_floating_unsynced_taps"
     private const val GROUP_FLOATING_BATCH_SYNC_THRESHOLD = 100L
     private const val FIRESTORE_OP_TIMEOUT_MS = 8_000L
+    // Round 1 P2-2 / P1-3: groups have NEVER synced to the cloud (no groups
+    // rule in firestore.rules; every group is local-only). The stale-deletion
+    // in refreshGroupsFromServer must stay OFF until real groups cloud sync
+    // ships — the day a groups read succeeds with an empty result, it would
+    // delete every local group not covered by a pending flag on hub entry
+    // (incl. groups restored from a delete-account snapshot, which carry no
+    // pending flags). Flip to true only as part of the groups-sync work.
+    private const val GROUPS_CLOUD_SYNC_ENABLED = false
 
     private val _groupUpdates = MutableSharedFlow<Unit>(extraBufferCapacity = 32)
     val groupUpdates: SharedFlow<Unit> = _groupUpdates.asSharedFlow()
@@ -1302,7 +1310,12 @@ object GroupRepository {
             }
         }
 
-        if (!snap.metadata.isFromCache) {
+        // Round 1 P2-2: stale deletion is gated on GROUPS_CLOUD_SYNC_ENABLED.
+        // With groups local-only, a server snapshot that does not contain a
+        // local group proves nothing — the group was never uploaded, not
+        // deleted elsewhere. Deleting here would wipe the user's groups the
+        // first time a groups read succeeds with an empty result.
+        if (GROUPS_CLOUD_SYNC_ENABLED && !snap.metadata.isFromCache) {
             val staleIds = all.values
                 .filter { g ->
                     g.members.any { it.userId == userId } &&
