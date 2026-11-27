@@ -28,7 +28,8 @@ data class BackupPayload(
     val customCounters: List<BackupCustomCounter>,
     val themeMode: String? = null,
     val droppedDays: Int = 0,
-    val droppedCounters: Int = 0
+    val droppedCounters: Int = 0,
+    val dayUpdatedAtMillis: Map<String, Long> = emptyMap()
 )
 
 object BackupCodec {
@@ -72,6 +73,9 @@ object BackupCodec {
                 arr.put(JSONObject().apply {
                     put("dateKey", day.dateKey)
                     put("count", day.count)
+                    if (day.updatedAtMillis > 0L) {
+                        put("updatedAtMillis", day.updatedAtMillis)
+                    }
                 })
             }
             put("dailyCounts", arr)
@@ -94,6 +98,7 @@ object BackupCodec {
         val root = JSONObject(jsonText)
         val profileObj = root.optJSONObject("profile")
         val arr = root.optJSONArray("dailyCounts") ?: JSONArray()
+        val dayUpdatedAtMillisMap = mutableMapOf<String, Long>()
         val days = buildList {
             for (i in 0 until arr.length()) {
                 val item = arr.optJSONObject(i) ?: continue
@@ -101,6 +106,12 @@ object BackupCodec {
                 val count = item.optLong("count", -1L)
                 if (isValidDateKey(dateKey) && count >= 0L) {
                     add(dateKey to count)
+                    if (item.has("updatedAtMillis")) {
+                        val updatedAt = item.optLong("updatedAtMillis", 0L)
+                        if (updatedAt > 0L) {
+                            dayUpdatedAtMillisMap[dateKey] = updatedAt
+                        }
+                    }
                 }
             }
         }
@@ -136,7 +147,8 @@ object BackupCodec {
         droppedCounters = countersArr.length() - counters.size,
             themeMode = profileObj?.optString("themeMode")?.takeIf { it.isNotBlank() }?.let {
                 com.example.ui.theme.AppThemeMode.fromStorageKey(it).storageKey
-            }
+            },
+            dayUpdatedAtMillis = dayUpdatedAtMillisMap
         )
     }
 
@@ -170,7 +182,12 @@ object BackupCodec {
                 startedAtMillis = firstPass.startedAtMillis ?: 0L
             )
             val syntheticDays = firstPass.days.map { (dateKey, count) ->
-                DailyCountEntity(userId = "verify_gate", dateKey = dateKey, count = count)
+                DailyCountEntity(
+                    userId = "verify_gate",
+                    dateKey = dateKey,
+                    count = count,
+                    updatedAtMillis = firstPass.dayUpdatedAtMillis[dateKey] ?: 0L
+                )
             }
             val syntheticCounters = firstPass.customCounters.map { c ->
                 CustomCounterEntity(
@@ -186,6 +203,9 @@ object BackupCodec {
 
             if (firstPass.days.sortedBy { it.first } != secondPass.days.sortedBy { it.first }) {
                 return Result.failure(IllegalStateException("Backup restore-test gate failed: daily counts mismatch."))
+            }
+            if (firstPass.dayUpdatedAtMillis != secondPass.dayUpdatedAtMillis) {
+                return Result.failure(IllegalStateException("Backup restore-test gate failed: day updatedAtMillis mismatch."))
             }
             if (firstPass.customCounters != secondPass.customCounters) {
                 return Result.failure(IllegalStateException("Backup restore-test gate failed: custom counters mismatch."))

@@ -399,19 +399,36 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
             profileDao.upsertProfile(mergedProfile)
 
             var restoredItems = 0
+            val expectedDayCounts = mutableMapOf<String, Long>()
             for ((dateKey, backupCount) in payload.days) {
                 val localExisting = dailyDao.getDay(userId, dateKey)
-                val mergedCount = maxOf(localExisting?.count ?: 0L, backupCount)
-                dailyDao.upsertDay(
-                    DailyCountEntity(
-                        userId = userId,
-                        dateKey = dateKey,
-                        count = mergedCount,
-                        pendingSync = true,
-                        isManualEdit = false,
-                        updatedAtMillis = now
+                val backupUpdatedAtMillis = payload.dayUpdatedAtMillis[dateKey]?.takeIf { it > 0L }
+                val keepNewerManualEdit =
+                    localExisting != null &&
+                        localExisting.isManualEdit &&
+                        backupUpdatedAtMillis != null &&
+                        localExisting.updatedAtMillis > backupUpdatedAtMillis
+                if (keepNewerManualEdit && localExisting != null) {
+                    dailyDao.upsertDay(
+                        localExisting.copy(
+                            pendingSync = true
+                        )
                     )
-                )
+                    expectedDayCounts[dateKey] = localExisting.count
+                } else {
+                    val mergedCount = maxOf(localExisting?.count ?: 0L, backupCount)
+                    dailyDao.upsertDay(
+                        DailyCountEntity(
+                            userId = userId,
+                            dateKey = dateKey,
+                            count = mergedCount,
+                            pendingSync = true,
+                            isManualEdit = false,
+                            updatedAtMillis = maxOf(now, backupUpdatedAtMillis ?: 0L)
+                        )
+                    )
+                    expectedDayCounts[dateKey] = mergedCount
+                }
                 restoredItems++
             }
             for (counter in payload.customCounters) {
@@ -441,9 +458,9 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
             if (verifiedProfile.startedAtMillis != resolvedStartedAt) {
                 return Result.failure(IllegalStateException("Restore verification failed: Started date was not preserved."))
             }
-            for ((dateKey, backupCount) in payload.days) {
+            for ((dateKey, expectedCount) in expectedDayCounts) {
                 val savedDay = dailyDao.getDay(userId, dateKey)
-                if (savedDay == null || savedDay.count < backupCount) {
+                if (savedDay == null || savedDay.count < expectedCount) {
                     return Result.failure(IllegalStateException("Restore verification failed for $dateKey."))
                 }
             }
