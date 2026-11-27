@@ -1281,7 +1281,9 @@ class ExampleRobolectricTest {
 
         val restoreResult = repo.restoreBackupJson(secondUserId, exportedJson)
         assertTrue(restoreResult.isSuccess)
-        assertEquals(2, restoreResult.getOrNull())
+        // restoreBackupJson returns Result<RestoreOutcome>, not Result<Int> —
+        // the 2 restored days are in restoredItems.
+        assertEquals(2, restoreResult.getOrNull()?.restoredItems)
 
         // Original Started date is preserved (2025-01-10, not 2026-06-01)
         val restoredProfile = repo.getProfileOnce(secondUserId)
@@ -7627,7 +7629,11 @@ class ExampleRobolectricTest {
     }
 
     @Test
-    fun fixRun13Task1_test1_themeSwitchChangesThemeAndPalette() {
+    fun fixRun13Task1_test1_themeIsBlackAndWhiteOnlyWithNoThemeSelector() {
+        // The red theme was removed by the user's decision (f58b66a: theme
+        // settings section removed entirely; app is B&W only). This test now
+        // pins the current truth: B&W is the only theme, and Settings shows
+        // no theme selector at all.
         // 1. Default theme is Black & White (unchanged from original design)
         assertEquals(
             com.example.ui.theme.AppThemeMode.BLACK_AND_WHITE,
@@ -7638,38 +7644,21 @@ class ExampleRobolectricTest {
             MainUiState().themeMode
         )
 
-        // 2. Red theme tokens match spec: Charcoal Black #1C1C1C canvas, Bone White #EDE6D8 cards/text, Barber Red #B3261E accent
-        assertEquals(androidx.compose.ui.graphics.Color(0xFF1C1C1C), com.example.ui.theme.CharcoalBlack)
-        assertEquals(androidx.compose.ui.graphics.Color(0xFFEDE6D8), com.example.ui.theme.BoneWhite)
-        assertEquals(androidx.compose.ui.graphics.Color(0xFFB3261E), com.example.ui.theme.BarberRed)
-        assertEquals(com.example.ui.theme.CharcoalBlack, com.example.ui.theme.RedAppPalette.canvasBackground)
-        assertEquals(com.example.ui.theme.BoneWhite, com.example.ui.theme.RedAppPalette.cardSurface)
-        assertEquals(com.example.ui.theme.BoneWhite, com.example.ui.theme.RedAppPalette.onCanvas)
-        assertEquals(com.example.ui.theme.CharcoalBlack, com.example.ui.theme.RedAppPalette.onCard)
-        assertEquals(com.example.ui.theme.BarberRed, com.example.ui.theme.RedAppPalette.accent)
+        // 2. Black & White palette tokens match spec
+        assertEquals(androidx.compose.ui.graphics.Color(0xFFFFFFFF), com.example.ui.theme.PureWhite)
+        assertEquals(androidx.compose.ui.graphics.Color(0xFF000000), com.example.ui.theme.PureBlack)
 
-        var selectedMode by mutableStateOf(com.example.ui.theme.AppThemeMode.BLACK_AND_WHITE)
-        val callbackModes = mutableListOf<com.example.ui.theme.AppThemeMode>()
         var observedPalette: com.example.ui.theme.AppColorPalette? = null
-        var observedMaterialBg: androidx.compose.ui.graphics.Color? = null
-        var observedMaterialSurface: androidx.compose.ui.graphics.Color? = null
-        var observedMaterialPrimary: androidx.compose.ui.graphics.Color? = null
 
         composeTestRule.setContent {
-            OneCroreTheme(themeMode = selectedMode) {
+            OneCroreTheme(themeMode = com.example.ui.theme.AppThemeMode.BLACK_AND_WHITE) {
                 observedPalette = com.example.ui.theme.AppThemeColors.palette
-                observedMaterialBg = androidx.compose.material3.MaterialTheme.colorScheme.background
-                observedMaterialSurface = androidx.compose.material3.MaterialTheme.colorScheme.surface
-                observedMaterialPrimary = androidx.compose.material3.MaterialTheme.colorScheme.primary
                 com.example.ui.screens.SettingsScreen(
-                    uiState = MainUiState(isLoading = false, themeMode = selectedMode),
+                    uiState = MainUiState(isLoading = false, themeMode = com.example.ui.theme.AppThemeMode.BLACK_AND_WHITE),
                     onUpdateDisplayName = {},
                     onUpdatePlan = {},
                     onUpdateReminders = { _, _, _, _, _ -> },
-                    onUpdateThemeMode = { newMode ->
-                        callbackModes += newMode
-                        selectedMode = newMode
-                    },
+                    onUpdateThemeMode = { },
                     onSyncNow = {},
                     onClearStatusMessage = {},
                     onExportBackupJson = { "{}" },
@@ -7681,48 +7670,16 @@ class ExampleRobolectricTest {
         }
         composeTestRule.waitForIdle()
 
-        // Default Black & White active initially
+        // Black & White active
         assertEquals(com.example.ui.theme.AppThemeMode.BLACK_AND_WHITE, observedPalette?.themeMode)
         assertEquals(com.example.ui.theme.PureWhite, observedPalette?.canvasBackground)
         assertEquals(com.example.ui.theme.PureWhite, observedPalette?.cardSurface)
         assertEquals(com.example.ui.theme.PureBlack, observedPalette?.accent)
 
-        composeTestRule.onNodeWithTag("settings_theme_selector").performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithTag("settings_theme_bw_option").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("settings_theme_red_option").assertIsDisplayed()
-        assertEquals(
-            true,
-            composeTestRule.onNodeWithTag("settings_theme_bw_option")
-                .fetchSemanticsNode().config[SemanticsProperties.Selected]
-        )
-
-        // Tap Red option -> switches theme & palette live across MaterialTheme and AppThemeColors
-        composeTestRule.onNodeWithTag("settings_theme_red_option").performClick()
-        composeTestRule.waitForIdle()
-
-        assertEquals(listOf(com.example.ui.theme.AppThemeMode.RED), callbackModes)
-        assertEquals(com.example.ui.theme.AppThemeMode.RED, observedPalette?.themeMode)
-        assertEquals(com.example.ui.theme.CharcoalBlack, observedPalette?.canvasBackground)
-        assertEquals(com.example.ui.theme.BoneWhite, observedPalette?.cardSurface)
-        assertEquals(com.example.ui.theme.BoneWhite, observedPalette?.onCanvas)
-        assertEquals(com.example.ui.theme.CharcoalBlack, observedPalette?.onCard)
-        assertEquals(com.example.ui.theme.BarberRed, observedPalette?.accent)
-        assertEquals(com.example.ui.theme.CharcoalBlack, observedMaterialBg)
-        assertEquals(com.example.ui.theme.BoneWhite, observedMaterialSurface)
-        assertEquals(com.example.ui.theme.BarberRed, observedMaterialPrimary)
-        assertEquals(
-            true,
-            composeTestRule.onNodeWithTag("settings_theme_red_option")
-                .fetchSemanticsNode().config[SemanticsProperties.Selected]
-        )
-
-        // Tap Black & White option -> switches cleanly back to default
-        composeTestRule.onNodeWithTag("settings_theme_bw_option").performClick()
-        composeTestRule.waitForIdle()
-
-        assertEquals(com.example.ui.theme.AppThemeMode.BLACK_AND_WHITE, observedPalette?.themeMode)
-        assertEquals(com.example.ui.theme.PureWhite, observedPalette?.canvasBackground)
-        assertEquals(com.example.ui.theme.PureBlack, observedPalette?.accent)
+        // No theme selector exists in Settings anymore — neither option
+        composeTestRule.onNodeWithTag("settings_theme_selector").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("settings_theme_bw_option").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("settings_theme_red_option").assertDoesNotExist()
     }
 
     @Test
@@ -8386,43 +8343,49 @@ class ExampleRobolectricTest {
             return refs
         }
 
-        // 1. bg_launch_logo_tile must NOT be an empty solid-black <shape>; it must stack tile + dot + '1' + body/tasbeeh
+        // 1. bg_launch_logo_tile must NOT be an empty solid-black <shape>; it must stack tile + dot + '1' + body/tasbeeh + ring
+        // (75e2f69: the launch tile gained the ring layer so every frame shows the same 144dp ring logo)
         val tileDrawable = androidx.core.content.ContextCompat.getDrawable(context, R.drawable.bg_launch_logo_tile)
         assertTrue(
             "bg_launch_logo_tile must be a LayerDrawable containing full logo layers (was ${tileDrawable?.javaClass?.simpleName})",
             tileDrawable is android.graphics.drawable.LayerDrawable
         )
         val tileLayers = tileDrawable as android.graphics.drawable.LayerDrawable
-        assertEquals("bg_launch_logo_tile must stack all 4 base logo layers", 4, tileLayers.numberOfLayers)
+        assertEquals("bg_launch_logo_tile must stack all 5 base logo layers", 5, tileLayers.numberOfLayers)
         val tileRefs = collectDrawableRefIds(R.drawable.bg_launch_logo_tile)
         assertEquals(
             listOf(
                 R.drawable.ic_logo_v11_tile,
                 R.drawable.ic_logo_v11_dot,
                 R.drawable.ic_logo_v11_one,
-                R.drawable.ic_logo_v11_body_tasbeeh
+                R.drawable.ic_logo_v11_body_tasbeeh,
+                R.drawable.ic_logo_v11_ring
             ),
             tileRefs
         )
 
-        // 2. windowBackground (bg_launch_splash_window) renders faint grid + full logo tile at Frame 0
+        // 2. windowBackground (bg_launch_splash_window) renders opaque white + full logo tile at Frame 0
+        // (75e2f69: launch window base is white instead of grid, so the logo shows once on white)
         val windowSplashDrawable = androidx.core.content.ContextCompat.getDrawable(context, R.drawable.bg_launch_splash_window)
         assertTrue(windowSplashDrawable is android.graphics.drawable.LayerDrawable)
         val windowRefs = collectDrawableRefIds(R.drawable.bg_launch_splash_window)
-        assertEquals(listOf(R.drawable.bg_launch_faint_grid, R.drawable.bg_launch_logo_tile), windowRefs)
+        assertEquals(listOf(android.R.color.white, R.drawable.bg_launch_logo_tile), windowRefs)
 
-        // 3. Android 12+ system splash icon (ic_splash_transparent) renders opaque faint grid + full logo tile at Frame 0
+        // 3. Android 12+ system splash icon (ic_splash_transparent) renders opaque white base + the full ring logo at Frame 0
+        // (75e2f69: 144dp ic_logo_v11_full replaces the 4-layer tile; the grid file itself is now a white base — see §4)
         val systemSplashIcon = androidx.core.content.ContextCompat.getDrawable(context, R.drawable.ic_splash_transparent)
         assertTrue(
-            "ic_splash_transparent must be a LayerDrawable with grid + full logo tile",
+            "ic_splash_transparent must be a LayerDrawable with white base + full logo",
             systemSplashIcon is android.graphics.drawable.LayerDrawable
         )
         val splashIconLayers = systemSplashIcon as android.graphics.drawable.LayerDrawable
         assertEquals(2, splashIconLayers.numberOfLayers)
-        assertTrue(splashIconLayers.getDrawable(1) is android.graphics.drawable.LayerDrawable)
-        assertEquals(4, (splashIconLayers.getDrawable(1) as android.graphics.drawable.LayerDrawable).numberOfLayers)
+        assertTrue(
+            "ic_splash_transparent layer 1 must be the full ring logo (ic_logo_v11_full)",
+            splashIconLayers.getDrawable(1) is android.graphics.drawable.BitmapDrawable
+        )
         val splashIconRefs = collectDrawableRefIds(R.drawable.ic_splash_transparent)
-        assertEquals(listOf(R.drawable.bg_splash_grid_288, R.drawable.bg_launch_logo_tile), splashIconRefs)
+        assertEquals(listOf(R.drawable.bg_splash_grid_288, R.drawable.ic_logo_v11_full), splashIconRefs)
 
         // 4. bg_splash_grid_288 must contain NO empty black patch (#FF000000) path; outer grid canvas is opaque #FFFFFFFF
         val gridParser = context.resources.getXml(R.drawable.bg_splash_grid_288)

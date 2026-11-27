@@ -653,7 +653,7 @@ class ExampleUnitTest {
     }
 
     @Test
-    fun dailyCountConflictRules_todayDeviceWinsWhenLocalExistsAndPastDaysLargerWinsAndNeverSmaller() {
+    fun dailyCountConflictRules_largerCountWinsForTodayAndPastDaysAndNeverSmaller() {
         val todayKey = "2026-11-16"
         val pastKey = "2026-11-10"
         val tLocal = 1_794_800_000_000L
@@ -684,7 +684,7 @@ class ExampleUnitTest {
         assertEquals(1_800L, resolvedTodayHigher.count)
         assertEquals(true, resolvedTodayHigher.pendingSync)
 
-        // 3. Today with local row where local < cloud (e.g. user edited today's count on device) -> device count wins for Today
+        // 3. Today with local row where local < cloud (e.g. user tapped on another device) -> larger count wins for Today too (R4-A7 maxOf rule)
         val localTodayEdited = DailyCountEntity("u1", todayKey, count = 900L, updatedAtMillis = tLocal, pendingSync = false)
         val resolvedTodayEdited = DuroodRepository.resolveDailyCountConflict(
             uid = "u1",
@@ -694,8 +694,8 @@ class ExampleUnitTest {
             cloudCount = 1_200L,
             cloudUpdatedAtMillis = tCloud
         )
-        assertEquals(900L, resolvedTodayEdited.count)
-        assertEquals(true, resolvedTodayEdited.pendingSync)
+        assertEquals(1_200L, resolvedTodayEdited.count)
+        assertEquals(false, resolvedTodayEdited.pendingSync)
 
         // 4. Past day where local > cloud -> larger count wins; cloud NEVER overwrites local with a smaller number
         val localPastHigher = DailyCountEntity("u1", pastKey, count = 2_600L, updatedAtMillis = tLocal, pendingSync = false)
