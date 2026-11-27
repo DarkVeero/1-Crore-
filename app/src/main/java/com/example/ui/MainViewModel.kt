@@ -1393,6 +1393,12 @@ class MainViewModel(
                         userId = currentUserId,
                         announcementId = item.id
                     )
+                    // Round 1 P2-3: also drop the local schedule + alarm, or a
+                    // deleted future announcement still pops up / pushes on
+                    // this phone until its window expires.
+                    AnnouncementScheduledDispatcher.cancelScheduledAnnouncement(
+                        appContext, item.id
+                    )
                     latestCloudAnnouncementsForHistory = latestCloudAnnouncementsForHistory
                         ?.filterNot { it.id == item.id }
                     lastHistoryCloudFetchMillis = 0L

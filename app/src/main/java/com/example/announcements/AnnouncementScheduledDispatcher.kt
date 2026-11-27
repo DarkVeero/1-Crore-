@@ -108,6 +108,34 @@ object AnnouncementScheduledDispatcher {
         }
     }
 
+    /**
+     * Round 1 P2-3: cancel a scheduled announcement completely — remove it from
+     * the schedule store AND cancel its AlarmManager alarm. Deleting only the
+     * cloud doc left the local schedule + alarm in place, so the announcement
+     * could still pop up / push on the owner's own phone until its window
+     * expired. The alarm PendingIntent must match the scheduled one exactly
+     * (same receiver, action, request code and flags) or cancel() is a no-op.
+     */
+    fun cancelScheduledAnnouncement(context: Context, announcementId: String) {
+        if (announcementId.isBlank()) return
+        val appContext = context.applicationContext
+        AnnouncementScheduleStore.removeAnnouncement(appContext, announcementId)
+        val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+        val intent = Intent(appContext, ScheduledAnnouncementReceiver::class.java).apply {
+            action = ACTION_DISPATCH_SCHEDULED_ANNOUNCEMENT
+            putExtra(EXTRA_SCHEDULED_ANNOUNCEMENT_ID, announcementId)
+        }
+        val requestCode = ((announcementId.hashCode() and 0x0FFFFFFF) + 7000)
+        val pendingIntent = PendingIntent.getBroadcast(
+            appContext,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        runCatching { alarmManager.cancel(pendingIntent) }
+        runCatching { pendingIntent.cancel() }
+    }
+
     private fun scheduleAlarmManagerTrigger(
         context: Context,
         announcementId: String,
