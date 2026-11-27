@@ -513,6 +513,17 @@ object FloatingCounterManager {
                 pushToCloud = false
             )
 
+            // R3-P2-17(b): a failed adjust must not bump the session count or
+            // pulse as if the tap counted — return the last good total with
+            // the state untouched (same early-return pattern as the
+            // null/non-member cases above).
+            if (adjustResult.isFailure) {
+                val snap = WidgetAndFloatingBridge.readCountsFromDatabase(
+                    appContext, db, userIdOverride, todayKey
+                )
+                return existingGroup.effectiveGroupTotal to snap
+            }
+
             val updatedGroup = adjustResult.getOrNull() ?: existingGroup
             if (adjustResult.isSuccess) {
                 GroupRepository.markGroupDirtyForSync(appContext, groupId)
