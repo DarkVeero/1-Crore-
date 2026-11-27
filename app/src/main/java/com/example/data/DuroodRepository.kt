@@ -1130,15 +1130,40 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
             val uid = requireUserId()
             require(uid == userId) { "Authenticated UID mismatch." }
 
+            // P1-2 (Round 1): delete the Firebase Auth account FIRST, before
+            // wiping any data. Firebase requires a recent login to delete an
+            // account, so a user signed in for weeks/months hits
+            // FirebaseAuthRecentLoginRequiredException here — if the data wipe
+            // ran first, the counts would already be destroyed in both places
+            // while the account survived. A null currentUser is a failure, not
+            // a success (the old `?.delete()` silently short-circuited and
+            // reported success without deleting anything). On Auth-delete
+            // failure nothing is touched and the user stays signed in, so they
+            // can re-authenticate and retry.
+            val firebaseUser = auth.currentUser
+                ?: return Result.failure(
+                    IllegalStateException("You're not signed in. Please sign in again and retry delete.")
+                )
+            require(firebaseUser.uid == uid) { "Authenticated UID mismatch." }
+            try {
+                firebaseUser.delete().await()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                return Result.failure(
+                    IllegalStateException("Could not delete your account. Please sign in again and retry delete.", e)
+                )
+            }
+
             val userDocRef = firestore.collection("users").document(uid)
             val countsRef = userDocRef.collection("daily_counts")
             val customRef = userDocRef.collection("custom_counters")
 
-        // Mark every local day and custom counter as pending sync first: if the
-        // cloud deletion below fails partway, the next sync re-pushes the
-        // surviving local rows instead of losing them.
-        dailyDao.markAllDaysPendingSync(uid)
-        customDao.markAllCountersPendingSync(uid)
+            // Mark every local day and custom counter as pending sync first: if the
+            // cloud deletion below fails partway, the next sync re-pushes the
+            // surviving local rows instead of losing them.
+            dailyDao.markAllDaysPendingSync(uid)
+            customDao.markAllCountersPendingSync(uid)
 
             try {
                 val docsToDelete = mutableListOf<DocumentReference>()
@@ -1170,12 +1195,6 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
             customDao.deleteAllForUser(uid)
             profileDao.deleteProfile(uid)
 
-            try {
-                auth.currentUser?.delete()?.await()
-            } catch (_: Exception) {
-                auth.signOut()
-            return Result.failure(IllegalStateException("Could not delete your account. Please sign in again and retry delete."))
-            }
             Result.success(Unit)
         } catch (e: CancellationException) {
             throw e
