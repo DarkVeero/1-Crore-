@@ -582,10 +582,12 @@ private fun V11AnimatedLogoTile(
             .testTag("one_crore_logo_canvas")
     ) {
         if (showStaticFinal) {
-            // Single clean logo, no ring: the pre-composited tile (same artwork as the
-            // animated branch, ring removed per owner 26 Nov).
+            // Static final logo: the SAME complete ring logo as every other frame
+            // (ic_logo_v11_full). The old tile_clean had no ring, so on slow /
+            // low-RAM phones the ring appeared in the system splash and then
+            // vanished in the Compose splash — the logo visibly changed.
             Image(
-                painter = painterResource(id = R.drawable.ic_logo_v11_tile_clean),
+                painter = painterResource(id = R.drawable.ic_logo_v11_full),
                 contentDescription = "1 Crore v11 logo",
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
