@@ -888,10 +888,11 @@ internal fun MainTabScaffold(
                             onInviteWhatsApp = viewModel::onInviteGroupWhatsApp,
                             onRenameGroup = viewModel::onRenameGroup,
                             onLeaveGroup = { id ->
-                                if (navController.currentBackStackEntry?.destination?.route == ROUTE_GROUP_DETAIL) {
-                                    navController.popBackStack()
+                                viewModel.onLeaveGroup(id) {
+                                    if (navController.currentBackStackEntry?.destination?.route == ROUTE_GROUP_DETAIL) {
+                                        navController.popBackStack()
+                                    }
                                 }
-                                viewModel.onLeaveGroup(id)
                             },
                             onDeleteGroup = { id ->
                                 if (navController.currentBackStackEntry?.destination?.route == ROUTE_GROUP_DETAIL) {

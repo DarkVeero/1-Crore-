@@ -2557,12 +2557,19 @@ class MainViewModel(
 
     fun onLeaveGroup(groupId: String, onLeft: () -> Unit = {}) {
         viewModelScope.launch {
-            closeGroupDetail(groupId)
-            dirtyGroupSyncIds.remove(groupId)
-            GroupRepository.leaveGroup(appContext, currentUserId, groupId)
-            reloadUserGroupsAndCelebrations()
-            statusMessageFlow.value = "Left group"
-            onLeft()
+            val result = GroupRepository.leaveGroup(appContext, currentUserId, groupId)
+            result.fold(
+                onSuccess = {
+                    closeGroupDetail(groupId)
+                    dirtyGroupSyncIds.remove(groupId)
+                    reloadUserGroupsAndCelebrations()
+                    statusMessageFlow.value = "Left group"
+                    onLeft()
+                },
+                onFailure = { err ->
+                    statusMessageFlow.value = err.localizedMessage?.takeIf { it.isNotBlank() } ?: "Could not leave group."
+                }
+            )
         }
     }
 
