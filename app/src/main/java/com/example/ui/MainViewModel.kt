@@ -1833,6 +1833,17 @@ class MainViewModel(
         if (MilestoneAnnouncementManager.isMilestoneAnnouncementId(announcement.id)) {
             MilestoneAnnouncementManager.markMilestoneCompletedForUser(appContext, currentUserId, announcement.id)
         }
+        // Popup-rendering diagnosis: the HomeScreen LaunchedEffect re-fires
+        // whenever the popup branch re-enters composition with the same
+        // announcement (e.g. an update dialog briefly takes priority), which
+        // recorded a duplicate STATUS_SHOWN entry in Messages History on
+        // every re-show. Record the show once per announcement, like the
+        // frequency-cap record below. (Direct announcements opened from
+        // history use recordDisplayedDirectAnnouncement instead — untouched.)
+        if (isCurrentAnnouncementShownRecorded) {
+            return
+        }
+        isCurrentAnnouncementShownRecorded = true
         AnnouncementHistoryStore.recordAnnouncement(
             context = appContext,
             userId = currentUserId,
@@ -1844,15 +1855,12 @@ class MainViewModel(
         if (isDirectAnnouncementFlow.value) {
             return
         }
-        if (!isCurrentAnnouncementShownRecorded) {
-            isCurrentAnnouncementShownRecorded = true
-            AnnouncementFrequencyStore.recordShown(
-                context = appContext,
-                userId = currentUserId,
-                announcement = announcement,
-                nowMillis = nowMillis
-            )
-        }
+        AnnouncementFrequencyStore.recordShown(
+            context = appContext,
+            userId = currentUserId,
+            announcement = announcement,
+            nowMillis = nowMillis
+        )
     }
 
     fun dismissAnnouncement() {
