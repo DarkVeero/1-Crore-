@@ -1353,7 +1353,7 @@ class ExampleRobolectricTest {
     }
 
     @Test
-    fun `updateSystemAudit laterCooldown24h forcedUpdateCannotSkip and failedDownloadCleansUpBrokenFile`(): Unit = runBlocking {
+    fun `updateSystemAudit laterCooldown10Min forcedUpdateCannotSkip and failedDownloadCleansUpBrokenFile`(): Unit = runBlocking {
         com.example.update.AppUpdateManager.resetDismissedStateForTest(context)
         val t0 = 1_795_000_000_000L
 
@@ -1376,7 +1376,7 @@ class ExampleRobolectricTest {
             )
         )
 
-        // 2. User taps "Later" at t0 -> suppressed in current session and for 24 hours
+        // 2. User taps "Later" at t0 -> suppressed in current session and for 10 minutes (user, 26 Nov 2026)
         com.example.update.AppUpdateManager.markDismissedForToday(
             context = context,
             versionCode = 4,
@@ -1390,14 +1390,14 @@ class ExampleRobolectricTest {
             )
         )
 
-        // Simulate a new app open 12 hours later (< 24h cooldown) -> still suppressed
+        // Simulate a new app open 9 minutes later (< 10 min cooldown) -> still suppressed
         com.example.update.AppUpdateManager.clearSessionDismissalForTest()
-        val twelveHoursLater = t0 + 12L * 3_600_000L
+        val nineMinutesLater = t0 + 9L * 60_000L
         assertFalse(
             com.example.update.AppUpdateManager.shouldAutoShowDialog(
                 context = context,
                 update = optionalUpdateV4,
-                nowMillis = twelveHoursLater
+                nowMillis = nineMinutesLater
             )
         )
 
@@ -1406,24 +1406,24 @@ class ExampleRobolectricTest {
             com.example.update.AppUpdateManager.shouldAutoShowDialog(
                 context = context,
                 update = forcedUpdateV4,
-                nowMillis = twelveHoursLater
+                nowMillis = nineMinutesLater
             )
         )
         assertTrue(
             com.example.update.AppUpdateManager.shouldAutoShowDialog(
                 context = context,
                 update = optionalUpdateV5,
-                nowMillis = twelveHoursLater
+                nowMillis = nineMinutesLater
             )
         )
 
-        // 4. After 24 hours have elapsed -> optional v4 auto-prompts again on a fresh session
-        val twentyFiveHoursLater = t0 + 25L * 3_600_000L
+        // 4. After 10 minutes have elapsed -> optional v4 auto-prompts again on a fresh session
+        val elevenMinutesLater = t0 + 11L * 60_000L
         assertTrue(
             com.example.update.AppUpdateManager.shouldAutoShowDialog(
                 context = context,
                 update = optionalUpdateV4,
-                nowMillis = twentyFiveHoursLater
+                nowMillis = elevenMinutesLater
             )
         )
 
