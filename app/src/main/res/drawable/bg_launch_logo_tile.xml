@@ -4,4 +4,5 @@
     <item android:drawable="@drawable/ic_logo_v11_dot" />
     <item android:drawable="@drawable/ic_logo_v11_one" />
     <item android:drawable="@drawable/ic_logo_v11_body_tasbeeh" />
+    <item android:drawable="@drawable/ic_logo_v11_ring" />
 </layer-list>

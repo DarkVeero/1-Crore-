@@ -6,8 +6,8 @@
         android:drawable="@drawable/bg_splash_grid_288"
         android:gravity="center" />
         <item
-        android:width="110dp"
-        android:height="110dp"
+        android:width="144dp"
+        android:height="144dp"
         android:drawable="@drawable/ic_logo_v11_full"
         android:gravity="center" />
 </layer-list>
