@@ -685,8 +685,7 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
             // 5. Push all remaining pending local days to cloud
             val pendingDays = dailyDao.getPendingDays(uid)
             for (pending in pendingDays) {
-                pushDayToCloud(uid, pending, cloudByDate.containsKey(pending.dateKey), countsCollection.path)
-                dailyDao.markDaySynced(uid, pending.dateKey)
+                pushPendingDayRaceSafe(uid, pending, countsCollection.path)
             }
 
             // Ensure all daily counts matching or behind cloud are marked synced
@@ -938,6 +937,68 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
                 handleFirestoreError(e, OperationType.CREATE, "$collectionPath/${day.dateKey}", auth)
                 throw e
             }
+        }
+    }
+
+    private suspend fun pushPendingDayRaceSafe(
+        uid: String,
+        initialDay: DailyCountEntity,
+        collectionPath: String
+    ) {
+        val day = dailyDao.getDay(uid, initialDay.dateKey) ?: initialDay
+        val docRef = firestore.collection("users").document(uid)
+            .collection("daily_counts").document(day.dateKey)
+
+        val finalCount = try {
+            firestore.runTransaction { tx ->
+                val snap = tx.get(docRef)
+                if (snap.exists()) {
+                    val cloudCount = (snap.getLong("count") ?: 0L).coerceAtLeast(0L)
+                    val targetCount = if (day.isManualEdit) day.count else maxOf(day.count, cloudCount)
+                    if (targetCount != cloudCount || day.isManualEdit) {
+                        val updatePayload = mapOf(
+                            "count" to targetCount,
+                            "clientUpdatedAt" to day.updatedAtMillis,
+                            "updatedAt" to FieldValue.serverTimestamp()
+                        )
+                        tx.update(docRef, updatePayload)
+                    }
+                    targetCount
+                } else {
+                    val createPayload = mapOf(
+                        "userId" to uid,
+                        "dateKey" to day.dateKey,
+                        "count" to day.count,
+                        "clientUpdatedAt" to day.updatedAtMillis,
+                        "createdAt" to FieldValue.serverTimestamp(),
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                    tx.set(docRef, createPayload)
+                    day.count
+                }
+            }.await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, "$collectionPath/${day.dateKey}", auth)
+            throw e
+        }
+
+        val localAfter = dailyDao.getDay(uid, day.dateKey)
+        if (localAfter != null && localAfter.count > finalCount && !localAfter.isManualEdit) {
+            return
+        }
+        if (finalCount > (localAfter?.count ?: day.count) && !(localAfter?.isManualEdit ?: day.isManualEdit)) {
+            dailyDao.upsertDay(
+                (localAfter ?: day).copy(
+                    count = finalCount,
+                    pendingSync = false,
+                    isManualEdit = false,
+                    updatedAtMillis = maxOf(localAfter?.updatedAtMillis ?: day.updatedAtMillis, System.currentTimeMillis())
+                )
+            )
+        } else {
+            dailyDao.markDaySynced(uid, day.dateKey)
         }
     }
 
