@@ -26,6 +26,14 @@ class OneCroreApp : Application(), Configuration.Provider {
             com.example.sync.SyncWorker.enqueuePeriodicSync(this@OneCroreApp)
             ReminderScheduler.rescheduleFromSavedStateIfPossible(this@OneCroreApp)
             com.example.announcements.AnnouncementScheduledDispatcher.reschedulePendingAnnouncements(this@OneCroreApp)
+            runCatching {
+                val repo = com.example.data.DuroodRepository(
+                    localDb = com.example.data.local.AppDatabase.getInstance(this@OneCroreApp),
+                    firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance(),
+                    auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+                )
+                repo.retryPendingAnnouncementCloudWrites(this@OneCroreApp)
+            }
         }
     }
 }

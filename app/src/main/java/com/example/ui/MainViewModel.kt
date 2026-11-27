@@ -612,11 +612,22 @@ class MainViewModel(
             }
         }
 
+        viewModelScope.launch {
+            val expired = runCatching { repository.retryPendingAnnouncementCloudWrites(appContext) }.getOrDefault(emptyList())
+            if (expired.isNotEmpty()) {
+                statusMessageFlow.value = "Could not send — announcement expired"
+            }
+        }
+
         // Auto-sync whenever internet connectivity returns
         viewModelScope.launch {
             var wasOnline = NetworkMonitor.isCurrentlyOnline(appContext)
             NetworkMonitor.observeOnline(appContext).collect { online ->
                 if (online && !wasOnline) {
+                    val expired = runCatching { repository.retryPendingAnnouncementCloudWrites(appContext) }.getOrDefault(emptyList())
+                    if (expired.isNotEmpty()) {
+                        statusMessageFlow.value = "Could not send — announcement expired"
+                    }
                     if (initialLoadOfflineErrorFlow.value) {
                         retryInitialLoad()
                     } else {
@@ -1322,9 +1333,15 @@ class MainViewModel(
             result.fold(
                 onSuccess = { saved ->
                     val isFuture = saved.isScheduledForFuture(now)
-                    val message = if (isFuture) "Announcement scheduled" else "Announcement queued to send"
+                    val message = if (!saved.cloudPublished) {
+                        "Saved on this phone — will send when online"
+                    } else if (isFuture) {
+                        "Announcement scheduled"
+                    } else {
+                        "Announcement scheduled"
+                    }
                     statusMessageFlow.value = message
-                    if (!isFuture) {
+                    if (!isFuture && saved.cloudPublished) {
                         refreshAnnouncements()
                     }
                     onComplete?.invoke(true, message)

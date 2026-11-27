@@ -1609,28 +1609,67 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
         nowMillis: Long = System.currentTimeMillis()
     ): Result<AnnouncementItem> {
         val appContext = context.applicationContext
+        val isOnline = com.example.sync.NetworkMonitor.isCurrentlyOnline(appContext) || com.example.sync.NetworkMonitor.hasNetworkConnection(appContext)
+        val cloudWrite = if (isOnline) {
+            runCatching {
+                withTimeoutOrNull(4_000L) {
+                    firestore.collection("announcements")
+                        .document(item.id)
+                        .set(item.toFirestoreMap(nowMillis))
+                        .await()
+                }
+            }.onFailure { err ->
+                Log.i(
+                    ANNOUNCEMENT_LOG_TAG,
+                    "cloud write failed: ${err.message}"
+                )
+            }
+        } else {
+            Result.success(null)
+        }
+        val success = isOnline && cloudWrite.isSuccess && cloudWrite.getOrNull() != null
+        val finalItem = item.copy(cloudPublished = success)
+        com.example.announcements.AnnouncementScheduleStore.saveAnnouncement(appContext, finalItem)
         com.example.announcements.AnnouncementScheduledDispatcher.scheduleOrDispatchAnnouncement(
             context = appContext,
-            item = item,
+            item = finalItem,
             nowMillis = nowMillis
         )
-        val cloudWrite = runCatching {
-            withTimeoutOrNull(4_000L) {
-                firestore.collection("announcements")
-                    .document(item.id)
-                    .set(item.toFirestoreMap(nowMillis))
-                    .await()
-            }
-        }.onFailure { err ->
-            Log.i(
-                ANNOUNCEMENT_LOG_TAG,
-                "cloud write failed: ${err.message}"
-            )
+        return Result.success(finalItem)
+    }
+
+    suspend fun retryPendingAnnouncementCloudWrites(
+        context: Context,
+        nowMillis: Long = System.currentTimeMillis()
+    ): List<AnnouncementItem> {
+        val appContext = context.applicationContext
+        val all = com.example.announcements.AnnouncementScheduleStore.getAllAnnouncements(appContext)
+        val expiredUnpublished = all.filter { !it.cloudPublished && nowMillis > it.endAtMillis }
+        for (item in expiredUnpublished) {
+            com.example.announcements.AnnouncementScheduleStore.removeAnnouncement(appContext, item.id)
+            Log.i(ANNOUNCEMENT_LOG_TAG, "pending announcement expired unpublished: ${item.id}")
         }
-                val writeError = cloudWrite.exceptionOrNull()
-        if (writeError != null) return Result.failure(writeError)
-        if (cloudWrite.getOrNull() == null) return Result.failure(java.util.concurrent.TimeoutException("Announcement cloud write timed out"))
-        return Result.success(item)
+        val isOnline = com.example.sync.NetworkMonitor.isCurrentlyOnline(appContext) || com.example.sync.NetworkMonitor.hasNetworkConnection(appContext)
+        if (!isOnline) return expiredUnpublished
+        val pending = all.filter { !it.cloudPublished && nowMillis <= it.endAtMillis }
+        if (pending.isEmpty()) return expiredUnpublished
+        for (item in pending) {
+            val cloudWrite = runCatching {
+                withTimeoutOrNull(4_000L) {
+                    firestore.collection("announcements")
+                        .document(item.id)
+                        .set(item.toFirestoreMap(nowMillis))
+                        .await()
+                }
+            }
+            val success = cloudWrite.isSuccess && cloudWrite.getOrNull() != null
+            if (success) {
+                val updatedItem = item.copy(cloudPublished = true)
+                com.example.announcements.AnnouncementScheduleStore.saveAnnouncement(appContext, updatedItem)
+                Log.i(ANNOUNCEMENT_LOG_TAG, "pending announcement published on retry: ${item.id}")
+            }
+        }
+        return expiredUnpublished
     }
 
     suspend fun deleteAnnouncement(announcementId: String): Result<Unit> {

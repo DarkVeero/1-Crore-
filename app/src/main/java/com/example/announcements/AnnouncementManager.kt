@@ -122,7 +122,8 @@ data class AnnouncementItem(
     val scheduledAtMillis: Long = 0L,
     val targetAudience: AnnouncementAudience = AnnouncementAudience.ALL,
     val inactiveDaysThreshold: Int = DEFAULT_INACTIVE_DAYS_THRESHOLD,
-    val isUrgent: Boolean = false
+    val isUrgent: Boolean = false,
+    val cloudPublished: Boolean = true
 ) {
     val hasActionButton: Boolean
         get() = !buttonText.isNullOrBlank() &&
@@ -204,6 +205,7 @@ data class AnnouncementItem(
             put("targetAudience", targetAudience.wireValue)
             put("inactiveDaysThreshold", inactiveDaysThreshold.coerceAtLeast(1))
             put("isUrgent", isUrgent)
+            put("cloudPublished", cloudPublished)
         }
     }
 
@@ -219,6 +221,7 @@ data class AnnouncementItem(
         fun fromJsonObject(obj: JSONObject): AnnouncementItem? {
             val id = obj.optString("id").trim()
             if (id.isEmpty()) return null
+            val cloudPublished = obj.optBoolean("cloudPublished", true)
             val dataMap = mutableMapOf<String, Any?>(
                 "title" to obj.optString("title", ""),
                 "body" to obj.optString("body", ""),
@@ -236,11 +239,12 @@ data class AnnouncementItem(
                 "inactiveDaysThreshold" to obj.optInt("inactiveDaysThreshold", DEFAULT_INACTIVE_DAYS_THRESHOLD),
                 "isUrgent" to obj.optBoolean("isUrgent", false)
             )
-            return AnnouncementParser.parseAnnouncementDocument(
+            val item = AnnouncementParser.parseAnnouncementDocument(
                 id = id,
                 data = dataMap,
                 allowInactiveOrExpired = true
-            )
+            ) ?: return null
+            return item.copy(cloudPublished = cloudPublished)
         }
     }
 }
@@ -578,6 +582,15 @@ object AnnouncementScheduleStore {
         val current = (prefs.getStringSet(KEY_DISPATCHED_PUSH_IDS, emptySet()) ?: emptySet()).toMutableSet()
         current.add(announcementId)
         prefs.edit().putStringSet(KEY_DISPATCHED_PUSH_IDS, current).apply()
+    }
+
+    fun removeAnnouncement(context: Context, announcementId: String) {
+        if (announcementId.isBlank()) return
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val existing = getAllAnnouncements(context).filterNot { it.id == announcementId }
+        val arr = JSONArray()
+        existing.forEach { arr.put(it.toJsonObject()) }
+        prefs.edit().putString(KEY_ITEMS, arr.toString()).apply()
     }
 
     fun resetForTest(context: Context) {
