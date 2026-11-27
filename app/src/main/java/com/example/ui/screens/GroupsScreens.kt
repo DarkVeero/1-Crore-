@@ -260,6 +260,14 @@ fun GroupsHubScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = palette.onCanvasSubtext
                     )
+                    // Round 1 P1-3: honest note while groups are local-only —
+                    // no cloud sync yet, so a code from another phone cannot
+                    // join, and a backup is the only way a group survives.
+                    Text(
+                        text = "Groups are saved on this phone only for now.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = palette.onCanvasSubtext
+                    )
                 }
             }
 
