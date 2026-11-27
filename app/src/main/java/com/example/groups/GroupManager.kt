@@ -88,6 +88,9 @@ object GroupRepository {
     private const val LOG_TAG = "Groups"
     private const val PREFS_NAME = "one_crore_groups_store_prefs"
     private const val KEY_GROUPS_JSON = "groups_registry_json"
+    // R3-P2-20: raw JSON of registry entries the reader could not decode,
+    // kept verbatim so a later write never deletes them.
+    private const val KEY_GROUPS_JSON_PRESERVED_RAW = "groups_registry_preserved_raw"
     private const val KEY_DELETED_GROUP_IDS = "deleted_group_ids"
     private const val KEY_PENDING_CREATE_SYNC_IDS = "pending_create_sync_ids"
     private const val KEY_PENDING_JOIN_SYNC_IDS = "pending_join_sync_ids"
@@ -141,6 +144,7 @@ object GroupRepository {
             .remove(KEY_PENDING_RENAME_SYNC_IDS)
         .remove(KEY_DIRTY_GROUP_SYNC_IDS)
         .remove(KEY_GROUP_FLOATING_UNSYNCED_TAPS)
+        .remove(KEY_GROUPS_JSON_PRESERVED_RAW)
         .apply()
     }
 
@@ -298,17 +302,57 @@ object GroupRepository {
         if (raw.isBlank()) return linkedMapOf()
         val deleted = readStringSet(context, KEY_DELETED_GROUP_IDS)
         val result = linkedMapOf<String, GroupItem>()
+        // R3-P2-20: entries that fail to decode are preserved verbatim (see
+        // KEY_GROUPS_JSON_PRESERVED_RAW) instead of being silently dropped —
+        // otherwise the next writeAllGroups rewrote the registry from this
+        // partial map and permanently deleted those groups.
+        val unparseable = mutableListOf<String>()
         runCatching {
             val array = JSONArray(raw)
             for (i in 0 until array.length()) {
-                val obj = array.optJSONObject(i) ?: continue
-                val group = decodeGroupJson(obj) ?: continue
+                val obj = array.optJSONObject(i)
+                if (obj == null) {
+                    array.optString(i)?.takeIf { it.isNotBlank() }?.let { unparseable.add(it) }
+                    continue
+                }
+                val group = decodeGroupJson(obj)
+                if (group == null) {
+                    unparseable.add(obj.toString())
+                    continue
+                }
                 if (group.id !in deleted) {
                     result[group.id] = group
                 }
             }
+        }.onFailure { err ->
+            // The whole array is corrupt: preserve the entire raw string.
+            unparseable.add(raw)
+            Log.w(LOG_TAG, "Groups registry JSON is corrupt; preserving it verbatim instead of dropping all groups.", err)
+        }
+        if (unparseable.isNotEmpty()) {
+            val existing = readPreservedRawEntries(context)
+            val merged = (existing + unparseable).distinct()
+            if (merged != existing) {
+                val arr = JSONArray()
+                merged.forEach { arr.put(it) }
+                prefs.edit().putString(KEY_GROUPS_JSON_PRESERVED_RAW, arr.toString()).apply()
+            }
+            Log.w(LOG_TAG, "Groups registry has ${unparseable.size} unparseable entries; preserved verbatim, not deleted.")
         }
         return result
+    }
+
+    private fun readPreservedRawEntries(context: Context): List<String> {
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val raw = prefs.getString(KEY_GROUPS_JSON_PRESERVED_RAW, null) ?: return emptyList()
+        return runCatching {
+            val arr = JSONArray(raw)
+            buildList {
+                for (i in 0 until arr.length()) {
+                    arr.optString(i)?.takeIf { it.isNotBlank() }?.let { add(it) }
+                }
+            }
+        }.getOrDefault(emptyList())
     }
 
     private fun writeAllGroups(context: Context, groups: Map<String, GroupItem>) {
@@ -318,6 +362,11 @@ object GroupRepository {
             .forEach { group ->
                 array.put(encodeGroupJson(group))
             }
+        // R3-P2-20: re-emit preserved unparseable entries so a write never
+        // deletes groups the reader could not decode.
+        readPreservedRawEntries(context).forEach { rawEntry ->
+            runCatching { array.put(JSONObject(rawEntry)) }
+        }
         context.applicationContext
             .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
@@ -438,6 +487,26 @@ object GroupRepository {
         var inviteCode = GroupLogic.generateInviteCode()
         while (inviteCode in existingCodes) {
             inviteCode = GroupLogic.generateInviteCode()
+        }
+        // R3-P2-19: local-only uniqueness is not enough — the same 6-char code
+        // could already exist in Firestore (created on another device), and a
+        // joiner would then land in an arbitrary one of the colliding groups.
+        // Check the cloud and regenerate on a hit (bounded attempts; an
+        // offline/error result proceeds with the locally-unique code).
+        var cloudVerified = false
+        var cloudAttempts = 0
+        while (!cloudVerified && cloudAttempts < 10) {
+            cloudAttempts++
+            when (fetchGroupByCodeFromFirestore(context, inviteCode)) {
+                is InviteLookupOutcome.NotFound -> cloudVerified = true
+                is InviteLookupOutcome.Found -> {
+                    inviteCode = GroupLogic.generateInviteCode()
+                    while (inviteCode in existingCodes) {
+                        inviteCode = GroupLogic.generateInviteCode()
+                    }
+                }
+                is InviteLookupOutcome.Error -> cloudVerified = true
+            }
         }
 
         val cleanMemberName = creatorDisplayName.trim().ifBlank { "Friend" }.take(80)
@@ -956,38 +1025,29 @@ object GroupRepository {
             return Result.failure(IllegalStateException("Use in-group + Custom for Main Durood groups."))
         }
         val cleanName = displayName.trim().ifBlank { "Friend" }.take(80)
-        val hasMember = group.members.any { it.userId == userId }
-        val newMembers = if (hasMember) {
-            group.members.map { member ->
-                if (member.userId == userId) {
-                    val existingToday = if (member.todayDateKey == todayDateKey) member.todayCount else 0L
-                    val currentWeekKey = currentWeekKey()
-                    val baseWeekly = if (member.weeklyDateKey == currentWeekKey) member.weeklyCount else 0L
-                    member.copy(
-                        displayName = cleanName,
-                        todayCount = (existingToday + delta).coerceAtLeast(0L),
-                        todayDateKey = todayDateKey,
-                        lifetimeTotalCount = (member.lifetimeTotalCount + delta).coerceAtLeast(0L),
-                        weeklyCount = (baseWeekly + delta).coerceAtLeast(0L),
-                    updatedAtMillis = maxOf(group.updatedAtMillis + 1L, nowMillis),
-                        weeklyDateKey = currentWeekKey,
-                    )
-                } else {
-                    member
-                }
+        // R3-P2-21: a non-member must not be silently auto-added as a member
+        // — that bypasses the 5-group cap and the code-only join, unlike
+        // adjustMainGroupCount which fails for non-members. Fail the same way.
+        if (group.members.none { it.userId == userId }) {
+            return Result.failure(IllegalStateException("You are not a member of this group."))
+        }
+        val newMembers = group.members.map { member ->
+            if (member.userId == userId) {
+                val existingToday = if (member.todayDateKey == todayDateKey) member.todayCount else 0L
+                val currentWeekKey = currentWeekKey()
+                val baseWeekly = if (member.weeklyDateKey == currentWeekKey) member.weeklyCount else 0L
+                member.copy(
+                    displayName = cleanName,
+                    todayCount = (existingToday + delta).coerceAtLeast(0L),
+                    todayDateKey = todayDateKey,
+                    lifetimeTotalCount = (member.lifetimeTotalCount + delta).coerceAtLeast(0L),
+                    weeklyCount = (baseWeekly + delta).coerceAtLeast(0L),
+                updatedAtMillis = maxOf(group.updatedAtMillis + 1L, nowMillis),
+                    weeklyDateKey = currentWeekKey,
+                )
+            } else {
+                member
             }
-        } else {
-            val clampedDelta = delta.coerceAtLeast(0L)
-            group.members + GroupMemberProgress(
-                userId = userId,
-                displayName = cleanName,
-                todayCount = clampedDelta,
-                todayDateKey = todayDateKey,
-                lifetimeTotalCount = clampedDelta,
-                weeklyCount = clampedDelta,
-                weeklyDateKey = currentWeekKey(),
-                updatedAtMillis = maxOf(group.updatedAtMillis + 1L, nowMillis)
-            )
         }
 
         val newSum = newMembers.sumOf { it.lifetimeTotalCount.coerceAtLeast(0L) }
