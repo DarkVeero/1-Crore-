@@ -415,7 +415,13 @@ object GroupRepository {
         val deleted = readStringSet(context, KEY_DELETED_GROUP_IDS)
         if (remote.id in deleted) return remote
         val all = readAllGroups(context)
-        val merged = mergeRemoteAndLocalGroup(all[remote.id], remote)
+        // R4-B1 residual: the single-group listener path (unlike the bulk
+        // refresh, which skips pending-join groups) merged a newer server
+        // copy over the local joiner before their join had synced, dropping
+        // them from the group. Preserve local-only members while the join
+        // is still pending.
+        val preserveLocalOnly = remote.id in readStringSet(context, KEY_PENDING_JOIN_SYNC_IDS)
+        val merged = mergeRemoteAndLocalGroup(all[remote.id], remote, preserveLocalOnlyMembers = preserveLocalOnly)
         if (merged != all[remote.id]) {
             all[remote.id] = merged
             writeAllGroups(context, all)
@@ -1197,16 +1203,24 @@ object GroupRepository {
         val pendingLeaves = readStringSet(context, KEY_PENDING_LEAVE_SYNC_IDS).toList()
         if (pendingLeaves.isNotEmpty()) {
             pendingLeaves.forEach { pendingId ->
-                removeMemberInFirestoreTransactionBestEffort(context, pendingId, userId, System.currentTimeMillis())
-                markPendingLeaveSync(context, pendingId, pending = false)
+                // NEW-5: only clear the flag when the cloud removal actually
+                // landed — clearing unconditionally stranded the user as a
+                // member server-side after any failed attempt.
+                if (removeMemberInFirestoreTransactionBestEffort(context, pendingId, userId, System.currentTimeMillis())) {
+                    markPendingLeaveSync(context, pendingId, pending = false)
+                }
             }
         }
         // Retry any locally deleted groups whose cloud deletion hasn't succeeded yet.
         val pendingDeletes = readStringSet(context, KEY_PENDING_DELETE_SYNC_IDS).toList()
         if (pendingDeletes.isNotEmpty()) {
             pendingDeletes.forEach { pendingId ->
-                deleteGroupInFirestoreBestEffort(context, pendingId)
-                markPendingDeleteSync(context, pendingId, pending = false)
+                // NEW-5: only clear the flag when the cloud delete actually
+                // landed — clearing unconditionally left the group alive
+                // server-side after any failed attempt.
+                if (deleteGroupInFirestoreBestEffort(context, pendingId)) {
+                    markPendingDeleteSync(context, pendingId, pending = false)
+                }
             }
         }
         // Retry any locally renamed groups whose cloud rename hasn't succeeded yet.
@@ -1504,19 +1518,26 @@ object GroupRepository {
     private suspend fun deleteGroupInFirestoreBestEffort(
         context: Context,
         groupId: String
-    ) {
-        val db = firestoreOrNull(context) ?: return
-        val authUser = runCatching { Firebase.auth.currentUser }.getOrNull() ?: return
-        if (authUser.uid.isBlank()) return
+    ): Boolean {
+        val db = firestoreOrNull(context) ?: return false
+        val authUser = runCatching { Firebase.auth.currentUser }.getOrNull() ?: return false
+        if (authUser.uid.isBlank()) return false
 
         cloudGroupWritesForTest.incrementAndGet()
+        // NEW-5: report success so the caller only clears the pending-delete
+        // flag when the cloud delete actually landed. (A delete() that
+        // completes returns Void/null even on success, so track it with an
+        // explicit flag rather than the call's return value.)
+        var succeeded = false
         runCatching {
             withTimeoutOrNull(FIRESTORE_OP_TIMEOUT_MS) {
                 db.collection("groups").document(groupId).delete().await()
+                succeeded = true
             }
         }.onFailure { err ->
             Log.i(LOG_TAG, "Group $groupId cloud delete deferred (${err.message})")
         }
+        return succeeded
     }
 
     private suspend fun upsertMemberStatsTransactionBestEffort(
@@ -1566,13 +1587,18 @@ object GroupRepository {
         groupId: String,
         userId: String,
         nowMillis: Long
-    ) {
-        val db = firestoreOrNull(context) ?: return
-        val authUser = runCatching { Firebase.auth.currentUser }.getOrNull() ?: return
-        if (authUser.uid.isBlank()) return
+    ): Boolean {
+        val db = firestoreOrNull(context) ?: return false
+        val authUser = runCatching { Firebase.auth.currentUser }.getOrNull() ?: return false
+        if (authUser.uid.isBlank()) return false
 
         cloudGroupWritesForTest.incrementAndGet()
         val docRef = db.collection("groups").document(groupId)
+        // NEW-5: report success so the caller only clears the pending-leave
+        // flag when the cloud removal actually landed. (A missing doc means
+        // the member is already gone, so the transaction completing counts
+        // as success.)
+        var succeeded = false
         runCatching {
             withTimeoutOrNull(3_500L) {
                 db.runTransaction { tx ->
@@ -1588,13 +1614,23 @@ object GroupRepository {
                     tx.set(docRef, toFirestoreMap(updated))
                     updated
                 }.await()
+                succeeded = true
             }
         }.onFailure { err ->
             Log.i(LOG_TAG, "Group $groupId leave deferred (${err.message})")
         }
+        return succeeded
     }
 
-    internal fun mergeRemoteAndLocalGroup(local: GroupItem?, remote: GroupItem): GroupItem {
+    internal fun mergeRemoteAndLocalGroup(
+        local: GroupItem?,
+        remote: GroupItem,
+        // R4-B1 residual: when this group has a pending join, the local-only
+        // members (the joiner) exist locally but not on the server yet. The
+        // remote-newer branch used to drop them; keep them until the join
+        // syncs. Defaults false so existing callers/tests are unaffected.
+        preserveLocalOnlyMembers: Boolean = false
+    ): GroupItem {
         if (local == null) return remote
         val localByUid = local.members.associateBy { it.userId }
         val mergedFromRemote = remote.members.map { remoteMember ->
@@ -1605,11 +1641,12 @@ object GroupRepository {
                 remoteMember
             }
         }
+        val remoteUids = remote.members.mapTo(mutableSetOf()) { it.userId }
+        val localOnlyMembers = local.members.filter { it.userId !in remoteUids }
         val mergedMembers = if (remote.updatedAtMillis >= local.updatedAtMillis) {
-            mergedFromRemote
+            if (preserveLocalOnlyMembers) mergedFromRemote + localOnlyMembers else mergedFromRemote
         } else {
-            val remoteUids = remote.members.mapTo(mutableSetOf()) { it.userId }
-            mergedFromRemote + local.members.filter { it.userId !in remoteUids }
+            mergedFromRemote + localOnlyMembers
         }
         val summed = mergedMembers.sumOf { it.lifetimeTotalCount.coerceAtLeast(0L) }
         // R3-P2-14: the remote total only matches the members when no merged
