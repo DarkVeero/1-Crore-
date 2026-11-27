@@ -316,10 +316,9 @@ fun AppNavigation(
                         currentUser = auth.currentUser
                         authRefreshTick++
                     },
+                    // Round 1 A-P2-1: sign-out cleanup (floating button,
+                    // widget user, reminders) now lives inside signOutUser.
                     onSignOut = {
-                        FloatingCounterManager.stopGroupFloatingButtonIfActive(context)
-                        WidgetAndFloatingBridge.setActiveUserId(context, null)
-                        ReminderScheduler.cancelAll(context)
                         signOutUser(
                             context = context,
                             credentialManager = credentialManager,
@@ -362,10 +361,9 @@ fun AppNavigation(
                     onSkipLinkPassword = {
                         skippedLinkPromptForUid = uid
                     },
+                    // Round 1 A-P2-1: sign-out cleanup (floating button,
+                    // widget user, reminders) now lives inside signOutUser.
                     onSignOut = {
-                        FloatingCounterManager.stopGroupFloatingButtonIfActive(context)
-                        WidgetAndFloatingBridge.setActiveUserId(context, null)
-                        ReminderScheduler.cancelAll(context)
                         signOutUser(
                             context = context,
                             credentialManager = credentialManager,

@@ -15,6 +15,9 @@ import androidx.credentials.exceptions.GetCredentialProviderConfigurationExcepti
 import androidx.credentials.exceptions.GetCredentialUnsupportedException
 import androidx.credentials.exceptions.NoCredentialException
 import com.example.R
+import com.example.floating.FloatingCounterManager
+import com.example.notifications.ReminderScheduler
+import com.example.widget.WidgetAndFloatingBridge
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
@@ -480,6 +483,17 @@ fun signOutUser(
                 val signingOutUid = Firebase.auth.currentUser?.uid
                 AuthFlowStore.clearFreshLogin(signingOutUid)
                 EmailVerificationAutoSender.clearForUser(context, signingOutUid)
+                // Round 1 A-P2-1 / C-P2-3: sign-out cleanup lives HERE, not at
+                // the call sites — the Settings logout path missed it, so the
+                // widget / floating button kept counting into the signed-out
+                // account (resolveUserId falls back to the stored/Room UID).
+                // stopFloatingButton stops ANY mode (main + group); the old
+                // call sites only stopped the group button, leaving the main
+                // one running. Each step is guarded so a cleanup failure can
+                // never block the sign-out itself.
+                runCatching { FloatingCounterManager.stopFloatingButton(context) }
+                runCatching { WidgetAndFloatingBridge.setActiveUserId(context, null) }
+                runCatching { ReminderScheduler.cancelAll(context) }
                 Firebase.auth.signOut()
                 onSignOutComplete()
             }

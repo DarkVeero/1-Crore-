@@ -684,7 +684,9 @@ fun SettingsScreen(
                         text = "Logout",
                         onClick = {
                             showLogoutDialog = false
-                            ReminderScheduler.cancelAll(context)
+                            // Round 1 A-P2-1: sign-out cleanup (floating
+                            // button, widget user, reminders) lives inside
+                            // signOutUser now.
                             signOutUser(context, credentialManager, scope)
                         }
                     )
