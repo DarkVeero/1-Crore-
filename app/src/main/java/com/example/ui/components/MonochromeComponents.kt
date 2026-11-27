@@ -135,11 +135,14 @@ private data class CachedGridCell(
 
 internal const val FAINT_GRID_SETTLE_DURATION_MS = 4_000
 internal const val FAINT_GRID_OSCILLATION_AMPLITUDE_DP = 7f
+// Single source of truth for the grid cell size: the splash drift (SplashScreen.kt)
+// moves exactly one cell, so it must use this constant, never a literal 32.dp.
+internal const val FAINT_GRID_SPACING_DP = 32
 
 @Composable
 fun FaintGridBackground(
     modifier: Modifier = Modifier,
-    gridSpacing: Dp = 32.dp,
+    gridSpacing: Dp = FAINT_GRID_SPACING_DP.dp,
     reduceMotion: Boolean = rememberReduceMotion(),
     driftDurationMs: Int = FAINT_GRID_SETTLE_DURATION_MS,
     pulseDurationMs: Int = FAINT_GRID_SETTLE_DURATION_MS,

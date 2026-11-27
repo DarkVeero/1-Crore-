@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.ui.components.BlackPillButton
+import com.example.ui.components.FAINT_GRID_SPACING_DP
 import com.example.ui.components.FaintGridBackground
 import com.example.ui.components.isLowEndOrLowRamDevice
 import com.example.ui.components.rememberReduceMotion
@@ -457,7 +458,7 @@ private fun V11SplashWaveStage(
     // the old 400 ms fade-in. One full cell = seamless (the lattice looks identical
     // at start and end). Static branch (reduce-motion / low-RAM / already-played)
     // stays perfectly still: drift 0, grid fully visible.
-    val gridSpacingPx = with(LocalDensity.current) { 32.dp.toPx() }
+    val gridSpacingPx = with(LocalDensity.current) { FAINT_GRID_SPACING_DP.dp.toPx() }
     val gridDriftT = SplashIntroSpec.gridDriftFraction(elapsedMsProvider(), showStaticFinal)
     val gridAlpha = SplashIntroSpec.gridAlpha(elapsedMsProvider(), showStaticFinal)
 
