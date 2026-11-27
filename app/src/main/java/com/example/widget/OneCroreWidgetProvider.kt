@@ -62,7 +62,11 @@ class OneCroreWidgetProvider : AppWidgetProvider() {
 
         fun handleFloatingButtonFromWidget(context: Context): Boolean {
             val appContext = context.applicationContext
-            if (FloatingCounterManager.isMainRunning(appContext)) {
+            // R3-P2-16: the widget toggle is the MAIN floating button, but a
+            // GROUP pill may be the one running. Toggling while any pill is
+            // running must stop it — the old isMainRunning check missed the
+            // group pill and startFloatingButton then replaced it with Main.
+            if (FloatingCounterManager.isRunning(appContext)) {
                 FloatingCounterManager.stopFloatingButton(appContext)
                 return false
             }
@@ -92,7 +96,9 @@ class OneCroreWidgetProvider : AppWidgetProvider() {
             context: Context,
             todayCount: Long,
             totalCount: Long,
-            isFloatingRunning: Boolean = FloatingCounterManager.isMainRunning(context)
+            // R3-P2-16: the widget shows the ON state whenever ANY pill is
+            // running, not only Main — a running group pill used to read OFF.
+            isFloatingRunning: Boolean = FloatingCounterManager.isRunning(context)
         ): RemoteViews {
             val appContext = context.applicationContext
             val views = RemoteViews(appContext.packageName, R.layout.widget_one_crore)
@@ -178,7 +184,8 @@ class OneCroreWidgetProvider : AppWidgetProvider() {
         ) {
             val appContext = context.applicationContext
             WidgetAndFloatingBridge.cacheLatestCounts(appContext, todayCount, totalCount)
-            val isFloatingRunning = FloatingCounterManager.isMainRunning(appContext)
+            // R3-P2-16: same as buildRemoteViews — ON whenever any pill runs.
+            val isFloatingRunning = FloatingCounterManager.isRunning(appContext)
         if (lastPushedToday == todayCount && lastPushedTotal == totalCount && lastPushedFloating == isFloatingRunning) return
         lastPushedToday = todayCount
         lastPushedTotal = totalCount

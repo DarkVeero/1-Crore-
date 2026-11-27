@@ -1544,7 +1544,12 @@ object GroupRepository {
             mergedFromRemote + local.members.filter { it.userId !in remoteUids }
         }
         val summed = mergedMembers.sumOf { it.lifetimeTotalCount.coerceAtLeast(0L) }
-        val resolvedServerTotal = if (remote.updatedAtMillis >= local.updatedAtMillis) {
+        // R3-P2-14: the remote total only matches the members when no merged
+        // member was substituted from local. A newer local member (e.g. a
+        // reduction) changes the displayed member but the remote sum still
+        // included the old value — use the summed members then.
+        val mergedDiffersFromRemote = mergedMembers != remote.members
+        val resolvedServerTotal = if (remote.updatedAtMillis >= local.updatedAtMillis && !mergedDiffersFromRemote) {
             (remote.serverTotalCount ?: summed).coerceAtLeast(0L)
         } else {
             summed
