@@ -23,6 +23,7 @@ import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingExcept
 import com.google.firebase.Firebase
 import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.auth.FirebaseAuthException
+import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.auth
 import kotlinx.coroutines.CancellationException
@@ -344,9 +345,10 @@ fun attemptAutoSignIn(
 }
 
 // Re-authenticates the currently signed-in Firebase user with a fresh Google
-// ID-token credential. Used when deleting the account of a Google-only user,
-// who has no password to re-authenticate with. Returns failure when there is
-// no signed-in user, no Google credential is available, or re-authentication fails.
+// R4-D2: if no authorised Google credential exists on this device, the
+// authorized-accounts-only request fails outright. Retry once letting the
+// user pick ANY Google account on the device, instead of failing. A user
+// cancellation is never retried (the picker must not pop up again unasked).
 internal suspend fun reauthenticateWithGoogle(
     context: Context,
     credentialManager: CredentialManager
@@ -358,10 +360,35 @@ internal suspend fun reauthenticateWithGoogle(
     } catch (_: Exception) {
         return Result.failure(IllegalStateException(GOOGLE_CONFIG_ERROR_MESSAGE))
     }
+    val firstAttempt = tryReauthenticateWithGoogle(
+        user = user,
+        context = context,
+        credentialManager = credentialManager,
+        clientId = clientId,
+        filterByAuthorizedAccounts = true
+    )
+    if (firstAttempt.isSuccess) return firstAttempt
+    if (firstAttempt.exceptionOrNull() is GetCredentialCancellationException) return firstAttempt
+    return tryReauthenticateWithGoogle(
+        user = user,
+        context = context,
+        credentialManager = credentialManager,
+        clientId = clientId,
+        filterByAuthorizedAccounts = false
+    )
+}
+
+private suspend fun tryReauthenticateWithGoogle(
+    user: FirebaseUser,
+    context: Context,
+    credentialManager: CredentialManager,
+    clientId: String,
+    filterByAuthorizedAccounts: Boolean
+): Result<Unit> {
     return try {
         val request = buildGoogleIdRequest(
             serverClientId = clientId,
-            filterByAuthorizedAccounts = true,
+            filterByAuthorizedAccounts = filterByAuthorizedAccounts,
             autoSelectEnabled = true
         )
         val hostContext = findHostActivity(context) ?: context
