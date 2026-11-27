@@ -8482,6 +8482,19 @@ class ExampleRobolectricTest {
         assertEquals(270f, com.example.ui.screens.SplashIntroSpec.ringSweepDegrees(fEnd.ringT), 0.01f)
         assertEquals(1f, fEnd.waveProgress, 0.001f)
 
+        // Background motion (user, 27 Nov 2026 — "background motioned wala"): the faint
+        // grid drifts exactly one cell (fraction 0..1) across the 900 ms intro and fades
+        // in 0..600 ms; the static branch never moves and is fully visible.
+        assertEquals(0f, com.example.ui.screens.SplashIntroSpec.gridDriftFraction(0f), 0.001f)
+        assertEquals(0.5f, com.example.ui.screens.SplashIntroSpec.gridDriftFraction(450f), 0.001f)
+        assertEquals(1f, com.example.ui.screens.SplashIntroSpec.gridDriftFraction(900f), 0.001f)
+        assertEquals(1f, com.example.ui.screens.SplashIntroSpec.gridDriftFraction(1_500f), 0.001f)
+        assertEquals(0f, com.example.ui.screens.SplashIntroSpec.gridDriftFraction(450f, showStaticFinal = true), 0.001f)
+        assertEquals(0f, com.example.ui.screens.SplashIntroSpec.gridAlpha(0f), 0.001f)
+        assertEquals(0.5f, com.example.ui.screens.SplashIntroSpec.gridAlpha(300f), 0.001f)
+        assertEquals(1f, com.example.ui.screens.SplashIntroSpec.gridAlpha(600f), 0.001f)
+        assertEquals(1f, com.example.ui.screens.SplashIntroSpec.gridAlpha(0f, showStaticFinal = true), 0.001f)
+
         // Robolectric UI timeline verification: Frame 0 -> ring draw -> black wave wipe -> Home opens <= 1s
         SplashSessionGuard.resetForTest()
         com.example.ui.screens.SplashIntroSpec.resetTestObservability()

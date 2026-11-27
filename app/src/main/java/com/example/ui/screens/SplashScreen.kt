@@ -37,8 +37,10 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
@@ -123,6 +125,16 @@ object SplashIntroSpec {
 
     fun ringSweepDegrees(ringT: Float): Float =
         (ringT.coerceIn(0f, 1f) * MAX_RING_SWEEP_DEGREES).coerceIn(0f, MAX_RING_SWEEP_DEGREES)
+
+    // Background motion (user, 27 Nov 2026 — "background motioned wala"): the faint
+    // grid drifts exactly one cell across the 900 ms intro (fraction 0..1, linear so
+    // the motion reads at constant speed) and fades in 0..600 ms; the static branch
+    // (reduce-motion / low-RAM / already-played) never moves and is fully visible.
+    fun gridDriftFraction(elapsedMs: Float, showStaticFinal: Boolean = false): Float =
+        if (showStaticFinal) 0f else (elapsedMs / TOTAL_INTRO_DURATION_MS.toFloat()).coerceIn(0f, 1f)
+
+    fun gridAlpha(elapsedMs: Float, showStaticFinal: Boolean = false): Float =
+        if (showStaticFinal) 1f else (elapsedMs / 600f).coerceIn(0f, 1f)
 
     fun frameValuesForElapsedMs(
         elapsedMs: Float,
@@ -436,9 +448,18 @@ private fun V11SplashWaveStage(
     // Cold-start handoff: the Android 12+ system splash is BLANK white by design
     // (ic_splash_blank — any logo there is circle-masked into a black circle with no
     // ring, phone-verified 27 Nov 2026), so this Compose tile is the SINGLE logo
-    // appearance. The faint grid + footer credit fade in 400..600 ms (the credit is
-    // fully visible by 700 ms, as the cold-start tests require).
+    // appearance. The footer credit fades in 400..600 ms (fully visible by 700 ms,
+    // as the cold-start tests require).
     val introAlpha = if (showStaticFinal) 1f else ((elapsedMsProvider() - 400f) / 200f).coerceIn(0f, 1f)
+    // Background motion (user, 27 Nov 2026 — "background motioned wala"): the faint
+    // grid drifts down exactly one cell (32dp) across the 900 ms intro and fades in
+    // from frame 0, so the motion is visible the whole splash instead of only after
+    // the old 400 ms fade-in. One full cell = seamless (the lattice looks identical
+    // at start and end). Static branch (reduce-motion / low-RAM / already-played)
+    // stays perfectly still: drift 0, grid fully visible.
+    val gridSpacingPx = with(LocalDensity.current) { 32.dp.toPx() }
+    val gridDriftT = SplashIntroSpec.gridDriftFraction(elapsedMsProvider(), showStaticFinal)
+    val gridAlpha = SplashIntroSpec.gridAlpha(elapsedMsProvider(), showStaticFinal)
 
     val splashCleared = !showStaticFinal && waveProgress >= 1f
     val clipPath = remember { Path() }
@@ -489,7 +510,12 @@ private fun V11SplashWaveStage(
                         .fillMaxSize()
                         .background(palette.canvasBackground)
                 )
-                FaintGridBackground(modifier = Modifier.alpha(introAlpha), reduceMotion = reduceMotion)
+                FaintGridBackground(
+                    modifier = Modifier
+                        .alpha(gridAlpha)
+                        .graphicsLayer { translationY = gridDriftT * gridSpacingPx },
+                    reduceMotion = reduceMotion
+                )
 
                 Box(
                     contentAlignment = Alignment.Center,
