@@ -114,7 +114,6 @@ fun SettingsScreen(
     var showNameDialog by remember { mutableStateOf(false) }
     var showPlanDialog by remember { mutableStateOf(false) }
     var showChangePasswordDialog by remember { mutableStateOf(false) }
-    var showLinkPasswordDialog by remember { mutableStateOf(false) }
     var editingReminderSlot by remember { mutableStateOf<Int?>(null) }
     var showLogoutDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -464,15 +463,6 @@ fun SettingsScreen(
                     onClick = { showChangePasswordDialog = true },
                     testTag = "settings_change_password_row"
                 )
-                if (!hasPasswordLinked) {
-                    HorizontalDivider(color = palette.hairline)
-                    SettingsActionRow(
-                        title = "Set Backup Password",
-                        subtitle = "Link a password to sign in with email if Google is lost",
-                        onClick = { showLinkPasswordDialog = true },
-                        testTag = "settings_link_password_row"
-                    )
-                }
                 HorizontalDivider(color = palette.hairline)
                 SettingsActionRow(
                     title = "Logout",
@@ -573,17 +563,6 @@ fun SettingsScreen(
                 hasPasswordLinked = true
                 showChangePasswordDialog = false
                 localNotice = "Password updated successfully."
-            }
-        )
-    }
-
-    if (showLinkPasswordDialog) {
-        LinkBackupPasswordDialog(
-            onDismiss = { showLinkPasswordDialog = false },
-            onLinked = {
-                hasPasswordLinked = true
-                showLinkPasswordDialog = false
-                localNotice = "Backup password linked to your account."
             }
         )
     }
@@ -708,116 +687,6 @@ fun SettingsScreen(
             }
         )
     }
-}
-
-@Composable
-private fun LinkBackupPasswordDialog(
-    onDismiss: () -> Unit,
-    onLinked: () -> Unit
-) {
-    val palette = AppThemeColors.palette
-    val scope = rememberCoroutineScope()
-    var newPassword by remember { mutableStateOf("") }
-    var confirmPassword by remember { mutableStateOf("") }
-    var isSaving by remember { mutableStateOf(false) }
-    var dialogError by remember { mutableStateOf<String?>(null) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = palette.cardSurface,
-        shape = RoundedCornerShape(16.dp),
-        title = {
-            Text(
-                text = "Set Backup Password",
-                style = MaterialTheme.typography.titleLarge,
-                color = palette.onCard
-            )
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    text = "Link a permanent password to your account (${Firebase.auth.currentUser?.email.orEmpty()}) for email sign-in recovery.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = palette.onCardSubtext
-                )
-                OutlinedTextField(
-                    value = newPassword,
-                    onValueChange = {
-                        newPassword = it
-                        dialogError = null
-                    },
-                    label = { Text("New Password") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    colors = appOutlinedTextFieldColors(),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = confirmPassword,
-                    onValueChange = {
-                        confirmPassword = it
-                        dialogError = null
-                    },
-                    label = { Text("Confirm Password") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    colors = appOutlinedTextFieldColors(),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                if (dialogError != null) {
-                    Text(
-                        text = dialogError.orEmpty(),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = palette.error,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = onDismiss, enabled = !isSaving) {
-                    Text("Cancel", color = palette.onCardSubtext)
-                }
-                BlackPillButton(
-                    text = if (isSaving) "Saving..." else "Save",
-                    enabled = !isSaving,
-                    onClick = {
-                        if (newPassword.length < 6) {
-                            dialogError = "Password must be at least 6 characters."
-                            return@BlackPillButton
-                        }
-                        if (newPassword != confirmPassword) {
-                            dialogError = "Passwords do not match."
-                            return@BlackPillButton
-                        }
-                        val user = Firebase.auth.currentUser
-                        val email = user?.email
-                        if (user == null || email.isNullOrBlank()) {
-                            dialogError = "Account email not found. Please sign in again."
-                            return@BlackPillButton
-                        }
-                        isSaving = true
-                        dialogError = null
-                        scope.launch {
-                            try {
-                                val credential = EmailAuthProvider.getCredential(email, newPassword)
-                                user.linkWithCredential(credential).await()
-                                user.reload().await()
-                                isSaving = false
-                                onLinked()
-                            } catch (e: Exception) {
-                                isSaving = false
-                                dialogError = mapFirebaseAuthError(e)
-                            }
-                        }
-                    }
-                )
-            }
-        }
-    )
 }
 
 @Composable
