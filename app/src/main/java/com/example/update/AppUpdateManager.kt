@@ -16,6 +16,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.Settings
+import android.util.Log
 import androidx.core.content.FileProvider
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
@@ -45,6 +46,10 @@ import java.util.Locale
 object UpdateConfig {
     const val UPDATE_VERSION_URL =
         "https://drive.google.com/uc?export=download&id=1T013CXTJbJFbUkNc_euHiD3f147tzlTE"
+    // R4-D-U9: the same version.json via Drive's alternate download host,
+    // tried when the primary uc endpoint fails.
+    const val UPDATE_VERSION_URL_FALLBACK =
+        "https://drive.usercontent.google.com/download?id=1T013CXTJbJFbUkNc_euHiD3f147tzlTE&export=download"
     const val SHARE_APP_HEADER =
         "*صَلُّوا عَلَيْهِ وَسَلِّمُوا تَسْلِيمًا ﷺ*"
     const val SHARE_APP_IQBAL_QUOTE =
@@ -108,17 +113,26 @@ interface UpdateSource {
 }
 
 class DriveVersionJsonUpdateSource(
-    private val versionJsonUrl: String = UpdateConfig.UPDATE_VERSION_URL
+    private val versionJsonUrl: String = UpdateConfig.UPDATE_VERSION_URL,
+    private val fallbackVersionJsonUrl: String = UpdateConfig.UPDATE_VERSION_URL_FALLBACK
 ) : UpdateSource {
 
     override suspend fun fetchLatestRelease(): AppUpdateInfo? = withContext(Dispatchers.IO) {
-        if (versionJsonUrl.isBlank() || versionJsonUrl.contains("REPLACE_WITH_")) {
-            return@withContext null
+        // R4-D-U9: try the primary URL, then the fallback host, instead of
+        // failing silently on the single hardcoded Drive file id.
+        val urls = listOf(versionJsonUrl, fallbackVersionJsonUrl)
+            .filter { it.isNotBlank() && !it.contains("REPLACE_WITH_") }
+            .distinct()
+        for (url in urls) {
+            fetchFromUrl(url)?.let { return@withContext it }
         }
+        null
+    }
 
+    private fun fetchFromUrl(urlString: String): AppUpdateInfo? {
         var connection: HttpURLConnection? = null
         try {
-            val url = URL(versionJsonUrl)
+            val url = URL(urlString)
             connection = (url.openConnection() as HttpURLConnection).apply {
                 instanceFollowRedirects = true
                 connectTimeout = 5_000
@@ -128,16 +142,27 @@ class DriveVersionJsonUpdateSource(
             }
 
             val code = connection.responseCode
-            if (code !in 200..299) return@withContext null
+            if (code !in 200..299) {
+                Log.w("AppUpdate", "Version check failed: ${url.host} returned HTTP $code")
+                return null
+            }
 
             val body = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-            if (body.isBlank() || !body.trimStart().startsWith("{")) return@withContext null
+            if (body.isBlank() || !body.trimStart().startsWith("{")) {
+                Log.w("AppUpdate", "Version check failed: ${url.host} returned a non-JSON body")
+                return null
+            }
 
-            parseVersionJson(body)
+            val parsed = parseVersionJson(body)
+            if (parsed == null) {
+                Log.w("AppUpdate", "Version check failed: ${url.host} body did not parse as version info")
+            }
+            return parsed
         } catch (e: CancellationException) {
             throw e
-        } catch (_: Exception) {
-            null
+        } catch (e: Exception) {
+            Log.w("AppUpdate", "Version check failed (${runCatching { URL(urlString).host }.getOrNull() ?: "unknown host"}): ${e.message}")
+            return null
         } finally {
             connection?.disconnect()
         }
