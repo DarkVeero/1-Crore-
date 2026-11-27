@@ -1909,9 +1909,18 @@ class MainViewModel(
             }
             if (MilestoneAnnouncementManager.isMilestoneAnnouncementId(current.id)) {
                 MilestoneAnnouncementManager.markMilestoneCompletedForUser(appContext, currentUserId, current.id)
-            }
-            if (MilestoneAnnouncementManager.isMilestoneAnnouncementId(current.id) || current.isUrgent) {
                 AnnouncementFrequencyStore.markActedOn(
+                    context = appContext,
+                    userId = currentUserId,
+                    announcementId = current.id,
+                    nowMillis = nowMillis
+                )
+            } else {
+                // Round 1 P2: a dismiss suppresses for 10 minutes, then the
+                // announcement is eligible again — urgent ones too. The old
+                // code marked urgent dismisses actedOn, hiding them forever.
+                // Only the Join/action tap (markActedOn) suppresses forever.
+                AnnouncementFrequencyStore.markDismissed(
                     context = appContext,
                     userId = currentUserId,
                     announcementId = current.id,

@@ -867,6 +867,16 @@ object AnnouncementFrequencyStore {
             return false
         }
 
+        // Round 1 P2: dismissing suppresses for one interval (10 min), then
+        // the announcement is eligible again — urgent ones too. This check
+        // sits before the urgent bypass on purpose: urgent bypasses the
+        // caps, not a dismissal the user just made.
+        if (record.dismissedAtMillis > 0L &&
+            (nowMillis - record.dismissedAtMillis) in 0L until minIntervalMillis
+        ) {
+            return false
+        }
+
         // Urgent owner announcements bypass all 10-min, 3/day, and 21/week caps while still
         // respecting schedule windows, audience targeting, and once-dismissed/acted suppression.
         if (announcement.isUrgent) {
@@ -894,6 +904,28 @@ object AnnouncementFrequencyStore {
             Instant.ofEpochMilli(ts).atZone(zoneId).toLocalDate() == today
         }
         if (globalImpressionsToday >= effectiveGlobalDailyCap) {
+            return false
+        }
+
+        // 1b. Same ceilings across the push channel. Pushes keep their own
+        // global record (ann_push_global_) — a push 2 minutes ago must also
+        // block a popup, or the day's total could reach 2x the configured
+        // cap (cap-many pushes + cap-many popups). The push path already
+        // consults this record via isEligibleToShow, so the cap is now one
+        // shared budget across both channels. (Round 1 P2.)
+        val pushRecord = readPushGlobalRecord(context, userId)
+        val pushLastShown = pushRecord.lastShownAtMillis
+        if (pushLastShown > 0L && (nowMillis - pushLastShown) in 0L until minIntervalMillis) {
+            return false
+        }
+        val pushImpressionsInLastWeek = pushRecord.impressionTimestamps.count { it >= weekStartMillis }
+        if (pushImpressionsInLastWeek >= globalWeeklyCap) {
+            return false
+        }
+        val pushImpressionsToday = pushRecord.impressionTimestamps.count { ts ->
+            Instant.ofEpochMilli(ts).atZone(zoneId).toLocalDate() == today
+        }
+        if (pushImpressionsToday >= effectiveGlobalDailyCap) {
             return false
         }
 
@@ -1079,6 +1111,32 @@ object AnnouncementFrequencyStore {
         )
     }
 
+    /**
+     * Records a dismissal: suppresses this announcement for one interval
+     * (10 min), then it becomes eligible again. Only the Join/action tap
+     * (markActedOn) suppresses forever. Round 1 P2: dismissing an urgent
+     * announcement used to mark it actedOn, hiding it forever and
+     * contradicting the documented "eligible again after 10 minutes" rule.
+     */
+    fun markDismissed(
+        context: Context,
+        userId: String,
+        announcementId: String,
+        nowMillis: Long = System.currentTimeMillis()
+    ) {
+        if (announcementId.isBlank()) return
+        val current = readRecord(context, userId, announcementId)
+        writeRecord(
+            context = context,
+            userId = userId,
+            announcementId = announcementId,
+            record = current.copy(
+                dismissedAtMillis = nowMillis,
+                lastShownAtMillis = maxOf(current.lastShownAtMillis, nowMillis)
+            )
+        )
+    }
+
     fun hasActedOn(context: Context, userId: String, announcementId: String): Boolean {
         return readRecord(context, userId, announcementId).actedOn
     }
@@ -1111,7 +1169,11 @@ object AnnouncementFrequencyStore {
     private data class StoredRecord(
         val impressionTimestamps: List<Long> = emptyList(),
         val actedOn: Boolean = false,
-        val lastShownAtMillis: Long = 0L
+        val lastShownAtMillis: Long = 0L,
+        // Round 1 P2: when the user dismissed this announcement. A dismiss
+        // suppresses it for one interval (10 min), then it is eligible again
+        // — unlike actedOn, which suppresses forever.
+        val dismissedAtMillis: Long = 0L
     )
 
     private data class GlobalStoredRecord(
@@ -1136,7 +1198,8 @@ object AnnouncementFrequencyStore {
             StoredRecord(
                 impressionTimestamps = timestamps,
                 actedOn = obj.optBoolean("actedOn", false),
-                lastShownAtMillis = effectiveLastShown
+                lastShownAtMillis = effectiveLastShown,
+                dismissedAtMillis = obj.optLong("dismissedAtMillis", 0L)
             )
         } catch (_: Exception) {
             StoredRecord()
@@ -1156,6 +1219,7 @@ object AnnouncementFrequencyStore {
             put("timestamps", arr)
             put("actedOn", record.actedOn)
             put("lastShownAtMillis", record.lastShownAtMillis)
+            put("dismissedAtMillis", record.dismissedAtMillis)
         }
         prefs.edit()
             .putString(stateKey(userId, announcementId), obj.toString())
