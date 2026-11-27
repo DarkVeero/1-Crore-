@@ -462,14 +462,19 @@ fun SettingsScreen(
             // Account
             SettingsSectionCard(title = "ACCOUNT") {
             Text(text = "Signed in as: $effectiveEmail", style = MaterialTheme.typography.bodyMedium, color = palette.onCardSubtext, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+            // Round 1 A-P2-2: Google-only accounts see the note INSTEAD of
+            // the Change Password row (user spec, 26 Nov) — a Google-only
+            // account has no password to change, so the row must not show.
             if (!hasPasswordLinked) Text(text = "Google account — signed in with Google", style = MaterialTheme.typography.bodyMedium, color = palette.onCardSubtext, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-                SettingsActionRow(
-                    title = "Change Password",
-                    subtitle = if (hasPasswordLinked) "Re-authenticate and update your password" else "Set a password for your account",
-                    onClick = { showChangePasswordDialog = true },
-                    testTag = "settings_change_password_row"
-                )
-                HorizontalDivider(color = palette.hairline)
+                if (hasPasswordLinked) {
+                    SettingsActionRow(
+                        title = "Change Password",
+                        subtitle = "Re-authenticate and update your password",
+                        onClick = { showChangePasswordDialog = true },
+                        testTag = "settings_change_password_row"
+                    )
+                    HorizontalDivider(color = palette.hairline)
+                }
                 SettingsActionRow(
                     title = "Logout",
                     subtitle = "Sign out of this device",
@@ -761,7 +766,9 @@ private fun ChangePasswordDialog(
         shape = RoundedCornerShape(16.dp),
         title = {
             Text(
-                text = if (isGoogleOnly) "Set Password" else "Change Password",
+                // Round 1 A-P2-2: a Google-only account has no password to
+                // change — the dialog shows the note instead of the form.
+                text = if (isGoogleOnly) "Google Account" else "Change Password",
                 style = MaterialTheme.typography.titleLarge,
                 color = palette.onCard
             )
@@ -769,6 +776,13 @@ private fun ChangePasswordDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(text = "Signed in as: ${userEmail.orEmpty()}", style = MaterialTheme.typography.bodyMedium, color = palette.onCardSubtext)
+                if (isGoogleOnly) {
+                    Text(
+                        text = "Google account — signed in with Google. There is no password to change for this account.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = palette.onCardSubtext
+                    )
+                }
                 if (!isGoogleOnly) {
                     OutlinedTextField(
                         value = currentPassword,
@@ -786,6 +800,7 @@ private fun ChangePasswordDialog(
                             .testTag("change_password_current_input")
                     )
                 }
+                if (!isGoogleOnly) {
                 OutlinedTextField(
                     value = newPassword,
                     onValueChange = {
@@ -816,6 +831,7 @@ private fun ChangePasswordDialog(
                         .fillMaxWidth()
                         .testTag("change_password_confirm_input")
                 )
+                }
                 if (dialogError != null) {
                     Text(
                         text = dialogError.orEmpty(),
@@ -827,12 +843,19 @@ private fun ChangePasswordDialog(
             }
         },
         confirmButton = {
+            // Round 1 A-P2-2: Google-only shows the note instead of the
+            // password button — there is nothing to submit, just Close.
+            if (isGoogleOnly) {
+                TextButton(onClick = onDismiss) {
+                    Text("Close", color = palette.onCardSubtext)
+                }
+            } else {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = onDismiss, enabled = !isSaving) {
                     Text("Cancel", color = palette.onCardSubtext)
                 }
                 BlackPillButton(
-                    text = if (isSaving) (if (isGoogleOnly) "Setting..." else "Updating...") else (if (isGoogleOnly) "Set Password" else "Update"),
+                    text = if (isSaving) "Updating..." else "Update",
                     enabled = !isSaving,
                     onClick = {
                         if (!isGoogleOnly && currentPassword.isEmpty()) {
@@ -876,6 +899,7 @@ private fun ChangePasswordDialog(
                     },
                     modifier = Modifier.testTag("change_password_submit_button")
                 )
+            }
             }
         }
     )
