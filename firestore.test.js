@@ -30,6 +30,9 @@ function validProfile(userId) {
     reminder2Hour: 21,
     reminder2Minute: 0,
     remindersEnabled: true,
+    // Round 1 P1-1: the app writes startedAtMillis on profile create + update;
+    // the fixture must carry it or the rules mismatch stays invisible.
+    startedAtMillis: Date.now() - 86400000,
     createdAt: ts,
     updatedAt: ts,
   };
@@ -42,6 +45,9 @@ function validDailyCount(userId, dateKey, count = 2600) {
     dateKey,
     count,
     clientUpdatedAt: Date.now(),
+    // Round 1 P1-1: R4-C9 stamps the day's own dailyTarget on create + update;
+    // the fixture must carry it or the rules mismatch stays invisible.
+    dailyTarget: 2600,
     createdAt: ts,
     updatedAt: ts,
   };
@@ -98,6 +104,8 @@ test("Authenticated owner can create, read, update, and delete own profile", asy
   await assertSucceeds(profileRef.set(validProfile(ALICE_UID)));
   await assertSucceeds(profileRef.get());
   await assertSucceeds(profileRef.update({ dailyTarget: 3000, updatedAt: pastTimestamp() }));
+  // Round 1 P1-1: profile updates carry startedAtMillis (heal + pending-sync paths).
+  await assertSucceeds(profileRef.update({ startedAtMillis: Date.now() - 86400000, updatedAt: pastTimestamp() }));
   await assertSucceeds(profileRef.delete());
 });
 
@@ -139,6 +147,8 @@ test("Authenticated owner can create, update, list, and delete valid daily count
   await assertSucceeds(docRef.set(validDailyCount(ALICE_UID, "2026-11-14", 1200)));
   await assertSucceeds(col.get());
   await assertSucceeds(docRef.update({ count: 2600, clientUpdatedAt: Date.now(), updatedAt: pastTimestamp() }));
+  // Round 1 P1-1: day updates carry dailyTarget (R4-C9).
+  await assertSucceeds(docRef.update({ dailyTarget: 3000, clientUpdatedAt: Date.now(), updatedAt: pastTimestamp() }));
   await assertSucceeds(docRef.delete());
 });
 

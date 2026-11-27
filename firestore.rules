@@ -38,6 +38,11 @@ service cloud.firestore {
              data.reminder2Minute is int && data.reminder2Minute >= 0 && data.reminder2Minute <= 59 &&
              data.remindersEnabled is bool &&
              (!('themeMode' in data) || (data.themeMode is string && (data.themeMode == 'bw' || data.themeMode == 'red'))) &&
+             // R4-C9 / profile heal: the app writes startedAtMillis on profile
+             // create + update (Round 1 P1-1: it was missing from the allowlists,
+             // so deploying this file denied every first sync). Optional so older
+             // clients without the field keep working.
+             (!('startedAtMillis' in data) || (data.startedAtMillis is int && data.startedAtMillis >= 0)) &&
              data.createdAt is timestamp && data.createdAt <= request.time &&
              data.updatedAt is timestamp && data.updatedAt <= request.time;
     }
@@ -47,6 +52,10 @@ service cloud.firestore {
              data.dateKey is string && data.dateKey == dateKey &&
              data.count is int && data.count >= 0 && data.count <= 100000000 &&
              data.clientUpdatedAt is int && data.clientUpdatedAt >= 0 &&
+             // R4-C9: every counted day carries its own dailyTarget (the app
+             // stamps the profile target on create + update). Optional so days
+             // written by older clients without the field keep working.
+             (!('dailyTarget' in data) || (data.dailyTarget is int && data.dailyTarget >= 1 && data.dailyTarget <= 10000000)) &&
              data.createdAt is timestamp && data.createdAt <= request.time &&
              data.updatedAt is timestamp && data.updatedAt <= request.time;
     }
@@ -89,7 +98,7 @@ service cloud.firestore {
                        incoming().keys().hasOnly([
                          'userId', 'displayName', 'dailyTarget', 'setupCompleted',
                          'reminder1Hour', 'reminder1Minute', 'reminder2Hour', 'reminder2Minute',
-                         'remindersEnabled', 'themeMode', 'createdAt', 'updatedAt'
+                         'remindersEnabled', 'themeMode', 'startedAtMillis', 'createdAt', 'updatedAt'
                        ]) &&
                        isValidUserProfile(incoming(), userId);
 
@@ -102,7 +111,7 @@ service cloud.firestore {
                        incoming().diff(existing()).affectedKeys().hasOnly([
                          'displayName', 'dailyTarget', 'setupCompleted',
                          'reminder1Hour', 'reminder1Minute', 'reminder2Hour', 'reminder2Minute',
-                         'remindersEnabled', 'themeMode', 'updatedAt'
+                         'remindersEnabled', 'themeMode', 'startedAtMillis', 'updatedAt'
                        ]);
 
       allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
@@ -119,7 +128,7 @@ service cloud.firestore {
                            'userId', 'dateKey', 'count', 'clientUpdatedAt', 'createdAt', 'updatedAt'
                          ]) &&
                          incoming().keys().hasOnly([
-                           'userId', 'dateKey', 'count', 'clientUpdatedAt', 'createdAt', 'updatedAt'
+                           'userId', 'dateKey', 'count', 'clientUpdatedAt', 'dailyTarget', 'createdAt', 'updatedAt'
                          ]) &&
                          isValidDailyCount(incoming(), userId, dateKey);
 
@@ -132,7 +141,7 @@ service cloud.firestore {
                          incoming().dateKey == existing().dateKey &&
                          incoming().createdAt == existing().createdAt &&
                          incoming().diff(existing()).affectedKeys().hasOnly([
-                           'count', 'clientUpdatedAt', 'updatedAt'
+                           'count', 'clientUpdatedAt', 'dailyTarget', 'updatedAt'
                          ]);
 
         allow delete: if isSignedIn() && isValidId(userId) && isValidDateKey(dateKey) && request.auth.uid == userId;
