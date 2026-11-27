@@ -7441,7 +7441,7 @@ class ExampleRobolectricTest {
                         onBack = {},
                         onOpenCounter = {},
                         onCreateCounter = { _, _ -> },
-                        onUpdateCounter = { _, _, _, _ -> },
+                        onUpdateCounter = { _, _, _, _, _ -> },
                         onDeleteCounter = vm::onDeleteCustomCounter
                     )
                 }
@@ -7528,7 +7528,7 @@ class ExampleRobolectricTest {
                         onBack = {},
                         onOpenCounter = {},
                         onCreateCounter = { _, _ -> },
-                        onUpdateCounter = { _, _, _, _ -> },
+                        onUpdateCounter = { _, _, _, _, _ -> },
                         onDeleteCounter = vm::onDeleteCustomCounter
                     )
                 }

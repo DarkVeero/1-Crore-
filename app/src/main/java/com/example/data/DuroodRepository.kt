@@ -330,6 +330,46 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
         )
     }
 
+    /** R3-P2-35: apply a signed delta to a custom counter's count (positive
+     * or negative), clamped at zero — mirroring incrementCounter but
+     * allowing the user to lower the count. Used by onUpdateCustomCounter so
+     * an edit dialog's stale absolute count cannot overwrite taps made
+     * while it was open. */
+    suspend fun adjustCustomCounter(userId: String, counterId: String, delta: Long) {
+        if (delta == 0L) return
+        val existing = customDao.getCounter(counterId) ?: return
+        if (existing.userId != userId || existing.isDeleted) return
+        customDao.upsertCounter(
+            existing.copy(
+                currentCount = (existing.currentCount + delta).coerceIn(0L, 100_000_000L),
+                pendingSync = true,
+                updatedAtMillis = System.currentTimeMillis()
+            )
+        )
+    }
+
+    /** R3-P2-35: set only a custom counter's name/target, leaving the live
+     * count untouched. */
+    suspend fun updateCustomCounterMeta(
+        userId: String,
+        counterId: String,
+        name: String,
+        targetCount: Long
+    ) {
+        val existing = customDao.getCounter(counterId) ?: return
+        if (existing.userId != userId || existing.isDeleted) return
+        val cleanName = name.trim().ifBlank { existing.name }.take(80)
+        customDao.upsertCounter(
+            existing.copy(
+                name = cleanName,
+                targetCount = targetCount.coerceIn(1L, 100_000_000L),
+                pendingSync = true,
+                isManualEdit = true,
+                updatedAtMillis = System.currentTimeMillis()
+            )
+        )
+    }
+
     suspend fun deleteCustomCounter(userId: String, counterId: String) {
         val existing = customDao.getCounter(counterId) ?: return
         if (existing.userId != userId) return

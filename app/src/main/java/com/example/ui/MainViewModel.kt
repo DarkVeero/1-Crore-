@@ -918,15 +918,24 @@ class MainViewModel(
         counterId: String,
         name: String,
         targetCount: Long,
-        currentCount: Long
+        currentCount: Long,
+        countAtDialogOpen: Long = currentCount
     ) {
         launchSafe {
-            repository.updateCustomCounterDetails(
+            // R3-P2-35: the edit dialog snapshots its count at open; a tap
+            // made while it was open must not be overwritten by that stale
+            // value. Apply only the user's intended change (typed - open)
+            // on top of the LIVE count, and set name/target without
+            // touching the count.
+            val delta = currentCount - countAtDialogOpen
+            if (delta != 0L) {
+                repository.adjustCustomCounter(currentUserId, counterId, delta)
+            }
+            repository.updateCustomCounterMeta(
                 userId = currentUserId,
                 counterId = counterId,
                 name = name,
-                targetCount = targetCount,
-                currentCount = currentCount
+                targetCount = targetCount
             )
             SyncWorker.enqueueWhenOnline(appContext)
             if (NetworkMonitor.isCurrentlyOnline(appContext)) {

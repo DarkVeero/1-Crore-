@@ -894,8 +894,8 @@ internal fun MainTabScaffold(
                             onAddCustomAmount = { amount ->
                                 viewModel.onAddCustomCounterAmount(counterId, amount)
                             },
-                            onUpdateCounter = { name, target, count ->
-                                viewModel.onUpdateCustomCounter(counterId, name, target, count)
+                            onUpdateCounter = { name, target, count, countAtOpen ->
+                                viewModel.onUpdateCustomCounter(counterId, name, target, count, countAtOpen)
                             }
                         )
                     }

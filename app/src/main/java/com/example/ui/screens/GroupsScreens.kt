@@ -584,10 +584,23 @@ fun GroupDetailScreen(
         if (group == null) {
             var didAutoReturn by remember { mutableStateOf(false) }
             androidx.compose.runtime.LaunchedEffect(Unit) {
+                // R3-P2-34: grace delay — a transient null (hub/server
+                // refresh rewrite) must not kick the user out of the detail
+                // screen. Only auto-back if the group stays absent; a
+                // reappearing group cancels this effect. Genuinely deleted
+                // groups still pop after the delay.
+                delay(1500L)
                 if (!didAutoReturn) {
                     didAutoReturn = true
                     onBack()
                 }
+            }
+            // Loading placeholder while the group is momentarily absent.
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = AppThemeColors.palette.onCard)
             }
             return@Box
         }

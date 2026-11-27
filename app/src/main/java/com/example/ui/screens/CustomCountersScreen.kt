@@ -86,7 +86,7 @@ fun CustomCountersScreen(
     onBack: () -> Unit,
     onOpenCounter: (String) -> Unit,
     onCreateCounter: (name: String, targetCount: Long) -> Unit,
-    onUpdateCounter: (counterId: String, name: String, targetCount: Long, currentCount: Long) -> Unit,
+    onUpdateCounter: (counterId: String, name: String, targetCount: Long, currentCount: Long, countAtDialogOpen: Long) -> Unit,
     onDeleteCounter: (counterId: String) -> Unit
 ) {
     val palette = AppThemeColors.palette
@@ -223,7 +223,10 @@ fun CustomCountersScreen(
             initialCount = toEdit.currentCount,
             onDismiss = { editingCounter = null },
             onSave = { name, target, count ->
-                onUpdateCounter(toEdit.id, name, target, count ?: toEdit.currentCount)
+                // R3-P2-35: toEdit is the snapshot captured when the dialog
+                // opened — its count is the open-time count the delta is
+                // measured against.
+                onUpdateCounter(toEdit.id, name, target, count ?: toEdit.currentCount, toEdit.currentCount)
                 editingCounter = null
             }
         )
@@ -389,7 +392,7 @@ fun CustomCounterDetailScreen(
     onBack: () -> Unit,
     onTapPlusOne: () -> Unit,
     onAddCustomAmount: (Long) -> Unit,
-    onUpdateCounter: (name: String, targetCount: Long, currentCount: Long) -> Unit
+    onUpdateCounter: (name: String, targetCount: Long, currentCount: Long, countAtDialogOpen: Long) -> Unit
 ) {
     val palette = AppThemeColors.palette
     val counter = uiState.customCounters.firstOrNull { it.id == counterId }
@@ -587,15 +590,20 @@ fun CustomCounterDetailScreen(
     }
 
     if (showEditDialog) {
+        // R3-P2-35: capture the count once, when the dialog opens. Passing
+        // the live counter.currentCount as initialCount would re-init the
+        // dialog's input on every tap made while it is open (remember is
+        // keyed on initialCount) and lose the open-time baseline.
+        val openCount = remember { counter.currentCount }
         CreateOrEditCustomCounterDialog(
             title = "Edit Counter",
             confirmLabel = "Save",
             initialName = counter.name,
             initialTarget = counter.targetCount.toString(),
-            initialCount = counter.currentCount,
+            initialCount = openCount,
             onDismiss = { showEditDialog = false },
             onSave = { name, target, count ->
-                onUpdateCounter(name, target, count ?: counter.currentCount)
+                onUpdateCounter(name, target, count ?: openCount, openCount)
                 showEditDialog = false
             }
         )
