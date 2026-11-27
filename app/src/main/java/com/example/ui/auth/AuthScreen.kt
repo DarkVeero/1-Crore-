@@ -187,6 +187,7 @@ internal fun firstAuthBannerError(errors: AuthFieldErrors): String? {
 @Composable
 fun AuthScreen(
     onAuthChanged: () -> Unit,
+    externalErrorMessage: String? = null,
     onGoogleSignInOverride: ((onSuccess: () -> Unit, onError: (String) -> Unit, onCancelled: () -> Unit) -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -204,13 +205,19 @@ fun AuthScreen(
 
     var isLoading by remember { mutableStateOf(false) }
     var isGoogleLoading by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var errorMessage by remember { mutableStateOf(externalErrorMessage) }
     var infoMessage by remember { mutableStateOf<String?>(null) }
     var nameError by remember { mutableStateOf<String?>(null) }
     var emailError by remember { mutableStateOf<String?>(null) }
     var passwordError by remember { mutableStateOf<String?>(null) }
     var confirmPasswordError by remember { mutableStateOf<String?>(null) }
     var showForgotPasswordDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(externalErrorMessage) {
+        if (externalErrorMessage != null) {
+            errorMessage = externalErrorMessage
+        }
+    }
 
     val reduceMotion = rememberReduceMotion()
     val isAnyAuthLoading = isLoading || isGoogleLoading
@@ -787,12 +794,12 @@ fun VerifyEmailScreen(
         val code = pendingActionCode ?: return@LaunchedEffect
         isApplyingLink = true
         statusMessage = null
+        var verified = false
         try {
             Firebase.auth.applyActionCode(code).await()
             Firebase.auth.currentUser?.reload()?.await()
-            onConsumeActionCode()
-            isApplyingLink = false
             if (Firebase.auth.currentUser?.isEmailVerified == true) {
+                verified = true
                 onVerified()
             } else {
                 statusMessage = "Email not verified yet — please check your inbox and tap the verification link."
@@ -800,35 +807,34 @@ fun VerifyEmailScreen(
         } catch (e: CancellationException) {
             throw e
         } catch (e: FirebaseAuthActionCodeException) {
-            onConsumeActionCode()
             try {
                 Firebase.auth.currentUser?.reload()?.await()
             } catch (_: Exception) {
             }
-            isApplyingLink = false
             if (Firebase.auth.currentUser?.isEmailVerified == true) {
+                verified = true
                 onVerified()
             } else {
-                statusMessage = when (e.errorCode) {
-                    "ERROR_EXPIRED_ACTION_CODE" ->
-                        "This verification link has expired. Tap 'Resend Verification Email' below for a new link."
-                    "ERROR_INVALID_ACTION_CODE" ->
-                        "This verification link has already been used or is invalid. Tap 'Resend Verification Email' below if you still need a new link."
-                    else ->
-                        "Could not verify with this link. Please tap 'Resend Verification Email' below."
-                }
+                statusMessage = mapVerificationActionCodeError(
+                    error = e,
+                    includeResendHint = true
+                )
             }
         } catch (e: Exception) {
-            onConsumeActionCode()
             try {
                 Firebase.auth.currentUser?.reload()?.await()
             } catch (_: Exception) {
             }
-            isApplyingLink = false
             if (Firebase.auth.currentUser?.isEmailVerified == true) {
+                verified = true
                 onVerified()
             } else {
                 statusMessage = mapFirebaseAuthError(e)
+            }
+        } finally {
+            isApplyingLink = false
+            if (verified) {
+                onConsumeActionCode()
             }
         }
     }
@@ -1307,6 +1313,29 @@ private fun ForgotPasswordDialog(
             }
         }
     )
+}
+
+fun mapVerificationActionCodeError(
+    error: FirebaseAuthActionCodeException,
+    includeResendHint: Boolean = false
+): String {
+    return when (error.errorCode) {
+        "ERROR_EXPIRED_ACTION_CODE" -> if (includeResendHint) {
+            "This verification link has expired. Tap 'Resend Verification Email' below for a new link."
+        } else {
+            "This verification link has expired. Please request a new verification email."
+        }
+        "ERROR_INVALID_ACTION_CODE" -> if (includeResendHint) {
+            "This verification link has already been used or is invalid. Tap 'Resend Verification Email' below if you still need a new link."
+        } else {
+            "This verification link has already been used or is invalid."
+        }
+        else -> if (includeResendHint) {
+            "Could not verify with this link. Please tap 'Resend Verification Email' below."
+        } else {
+            "Could not verify with this link. Please try requesting a new verification email."
+        }
+    }
 }
 
 fun mapFirebaseAuthError(error: Exception): String {

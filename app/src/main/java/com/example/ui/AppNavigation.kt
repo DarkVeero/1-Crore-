@@ -35,6 +35,8 @@ import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
@@ -82,6 +84,8 @@ import com.example.ui.auth.AuthFlowStore
 import com.example.ui.auth.AuthScreen
 import com.example.ui.auth.LinkPasswordScreen
 import com.example.ui.auth.VerifyEmailScreen
+import com.example.ui.auth.mapFirebaseAuthError
+import com.example.ui.auth.mapVerificationActionCodeError
 import com.example.ui.auth.reauthenticateWithGoogle
 import com.example.ui.auth.signOutUser
 import com.example.ui.components.rememberReduceMotion
@@ -105,8 +109,10 @@ import com.example.widget.WidgetAndFloatingBridge
 import com.google.firebase.Firebase
 import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthActionCodeException
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.auth
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.tasks.await
 
 private const val ROUTE_CUSTOM_COUNTERS = "custom_counters"
@@ -219,6 +225,7 @@ fun AppNavigation(
     var currentUser by remember { mutableStateOf(auth.currentUser) }
     var authRefreshTick by remember { mutableIntStateOf(0) }
     var skippedLinkPromptForUid by remember { mutableStateOf<String?>(null) }
+    var verificationErrorMessage by remember { mutableStateOf<String?>(null) }
     val reduceMotion = rememberReduceMotion()
 
     DisposableEffect(auth) {
@@ -246,17 +253,40 @@ fun AppNavigation(
 
     // If a verification App Link arrives while signed out or already verified, apply and consume cleanly
     LaunchedEffect(pendingVerificationCode, user?.uid, user?.isEmailVerified, isGoogleSignedIn) {
-        val code = pendingVerificationCode ?: return@LaunchedEffect
+        val code = pendingVerificationCode ?: run {
+            verificationErrorMessage = null
+            return@LaunchedEffect
+        }
         val needsVerifyScreen = user != null && !user.isEmailVerified && !isGoogleSignedIn
         if (!needsVerifyScreen) {
+            verificationErrorMessage = null
+            var verified = false
             try {
                 auth.applyActionCode(code).await()
-                auth.currentUser?.reload()?.await()
-                currentUser = auth.currentUser
-                authRefreshTick++
-            } catch (_: Exception) {
+                val signedInUser = auth.currentUser
+                if (signedInUser != null) {
+                    signedInUser.reload().await()
+                    currentUser = auth.currentUser
+                    authRefreshTick++
+                    verified = auth.currentUser?.isEmailVerified == true
+                    if (!verified) {
+                        verificationErrorMessage =
+                            "Email not verified yet — please check your inbox and tap the verification link."
+                    }
+                } else {
+                    verified = true
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: FirebaseAuthActionCodeException) {
+                verificationErrorMessage = mapVerificationActionCodeError(e)
+            } catch (e: Exception) {
+                verificationErrorMessage = mapFirebaseAuthError(e)
             } finally {
-                onConsumeVerificationCode()
+                if (verified) {
+                    verificationErrorMessage = null
+                    onConsumeVerificationCode()
+                }
             }
         }
     }
@@ -270,7 +300,8 @@ fun AppNavigation(
                     onAuthChanged = {
                         currentUser = auth.currentUser
                         authRefreshTick++
-                    }
+                    },
+                    externalErrorMessage = verificationErrorMessage
                 )
             }
         } else if (!user.isEmailVerified && !isGoogleSignedIn) {
@@ -320,6 +351,8 @@ fun AppNavigation(
                     onConsumeWidgetAction = onConsumeWidgetAction,
                     pendingAnnouncementRequest = pendingAnnouncementRequest,
                     onConsumeAnnouncementRequest = onConsumeAnnouncementRequest,
+                    externalStatusMessage = verificationErrorMessage,
+                    onClearExternalStatusMessage = { verificationErrorMessage = null },
                     onPasswordLinked = {
                         currentUser = auth.currentUser
                         authRefreshTick++
@@ -369,6 +402,8 @@ private fun AuthenticatedAppRoot(
     onConsumeWidgetAction: () -> Unit,
     pendingAnnouncementRequest: AnnouncementLaunchRequest?,
     onConsumeAnnouncementRequest: () -> Unit,
+    externalStatusMessage: String? = null,
+    onClearExternalStatusMessage: () -> Unit = {},
     onPasswordLinked: () -> Unit,
     onSkipLinkPassword: () -> Unit,
     onSignOut: () -> Unit
@@ -504,7 +539,9 @@ private fun AuthenticatedAppRoot(
                             pendingWidgetAction = pendingWidgetAction,
                             onConsumeWidgetAction = onConsumeWidgetAction,
                             pendingAnnouncementRequest = pendingAnnouncementRequest,
-                            onConsumeAnnouncementRequest = onConsumeAnnouncementRequest
+                            onConsumeAnnouncementRequest = onConsumeAnnouncementRequest,
+                            externalStatusMessage = externalStatusMessage,
+                            onClearExternalStatusMessage = onClearExternalStatusMessage
                         )
                     }
                 }
@@ -532,7 +569,9 @@ internal fun MainTabScaffold(
     pendingWidgetAction: String? = null,
     onConsumeWidgetAction: () -> Unit = {},
     pendingAnnouncementRequest: AnnouncementLaunchRequest? = null,
-    onConsumeAnnouncementRequest: () -> Unit = {}
+    onConsumeAnnouncementRequest: () -> Unit = {},
+    externalStatusMessage: String? = null,
+    onClearExternalStatusMessage: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val navController = rememberNavController()
@@ -541,6 +580,7 @@ internal fun MainTabScaffold(
     val reduceMotion = rememberReduceMotion()
     val animDuration = if (reduceMotion) 0 else 200
     var openCustomAmountOnHomeLaunch by rememberSaveable { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
 
     val isCustomCountersRoute = currentRoute == ROUTE_CUSTOM_COUNTERS ||
         currentRoute.startsWith("custom_counter_detail")
@@ -618,6 +658,13 @@ internal fun MainTabScaffold(
         }
     }
 
+    LaunchedEffect(externalStatusMessage, canPresentPopups) {
+        if (!canPresentPopups) return@LaunchedEffect
+        val msg = externalStatusMessage ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(msg)
+        onClearExternalStatusMessage()
+    }
+
     val palette = AppThemeColors.palette
 
     BoxWithConstraints(
@@ -630,6 +677,7 @@ internal fun MainTabScaffold(
         Scaffold(
             containerColor = palette.canvasBackground,
             contentWindowInsets = WindowInsets.safeDrawing,
+            snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
             bottomBar = {
                 if (!useNavRail) {
                     androidx.compose.foundation.layout.Column {
