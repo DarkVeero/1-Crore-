@@ -2667,12 +2667,17 @@ class MainViewModel(
                 statusMessageFlow.value = "Connect to the internet to delete your account"
                 return@launch
             }
-            ReminderScheduler.cancelAll(appContext)
             val groupsSnapshot = GroupRepository.snapshotLocalGroups(appContext)
             val currentGroups = GroupRepository.getGroupsForUser(appContext, currentUserId)
-            currentGroups.forEach { group ->
-                GroupRepository.leaveGroup(appContext, currentUserId, group.id)
+            for (group in currentGroups) {
+                val leaveResult = GroupRepository.leaveGroup(appContext, currentUserId, group.id)
+                if (leaveResult.isFailure) {
+                    GroupRepository.restoreLocalGroupsSnapshot(appContext, groupsSnapshot)
+                    statusMessageFlow.value = (leaveResult.exceptionOrNull()?.localizedMessage ?: "Delete failed. Please try again.") + " If a group leave already went through, re-join with the invite codes."
+                    return@launch
+                }
             }
+            ReminderScheduler.cancelAll(appContext)
             val result = repository.deleteAllUserData(currentUserId)
         if (result.isFailure) {
                 GroupRepository.restoreLocalGroupsSnapshot(appContext, groupsSnapshot)
