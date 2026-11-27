@@ -768,8 +768,9 @@ class ExampleUnitTest {
 
     @Test
     fun updateSystemAudit_apkValidationAndFailureMappingAndCooldownConstants() {
-        // 24-hour cooldown constant for "Later" dismissal
-        assertEquals(24L * 60L * 60L * 1000L, com.example.update.AppUpdateManager.LATER_COOLDOWN_MILLIS)
+        // 10-minute cooldown constant for "Later" dismissal (user, 26 Nov 2026:
+        // Later shows the dialog again after 10 min, not 24 h)
+        assertEquals(10L * 60L * 1000L, com.example.update.AppUpdateManager.LATER_COOLDOWN_MILLIS)
 
         // Progress text formatting
         assertEquals(
@@ -790,7 +791,10 @@ class ExampleUnitTest {
             com.example.update.AppUpdateManager.mapFailureReason(android.app.DownloadManager.ERROR_HTTP_DATA_ERROR)
         )
 
-        // APK magic-byte header validation (rejects empty, small, or HTML error pages; accepts valid PK zip/APK header)
+        // APK validation (R4-D-U1 full): a parseable APK is not enough — the file
+        // must be OUR app's APK (ZIP with AndroidManifest.xml + matching package
+        // name). Missing files, HTML error pages, and a bare PK header with no
+        // manifest are all rejected; only a real APK passes.
         val tempDir = java.nio.file.Files.createTempDirectory("apk_validation_test").toFile()
         val context: android.content.Context = androidx.test.core.app.ApplicationProvider.getApplicationContext()
         try {
@@ -802,13 +806,13 @@ class ExampleUnitTest {
             }
             assertEquals(false, com.example.update.AppUpdateManager.isValidApkFile(context, htmlFile))
 
-            val validApkFile = java.io.File(tempDir, "valid_1crore.apk").apply {
+            val pkOnlyFile = java.io.File(tempDir, "pk_only.apk").apply {
                 val bytes = ByteArray(2048)
                 bytes[0] = 0x50.toByte() // 'P'
                 bytes[1] = 0x4B.toByte() // 'K'
                 writeBytes(bytes)
             }
-            assertTrue(com.example.update.AppUpdateManager.isValidApkFile(context, validApkFile))
+            assertFalse(com.example.update.AppUpdateManager.isValidApkFile(context, pkOnlyFile))
         } finally {
             tempDir.deleteRecursively()
         }
