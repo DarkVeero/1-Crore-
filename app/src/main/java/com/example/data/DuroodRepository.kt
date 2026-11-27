@@ -18,6 +18,7 @@ import com.example.data.remote.handleFirestoreError
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
+import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Source
@@ -1002,23 +1003,24 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
         customDao.markAllCountersPendingSync(uid)
 
             try {
+                val docsToDelete = mutableListOf<DocumentReference>()
                 val snapshot = countsRef.get().await()
                 for (doc in snapshot.documents) {
-                    doc.reference.delete().await()
+                    docsToDelete.add(doc.reference)
                 }
                 val customSnap = customRef.get().await()
                 for (doc in customSnap.documents) {
-                    doc.reference.delete().await()
+                    docsToDelete.add(doc.reference)
                 }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                handleFirestoreError(e, OperationType.DELETE, userDocRef.path, auth)
-                throw e
-            }
+                docsToDelete.add(userDocRef)
 
-            try {
-                userDocRef.delete().await()
+                for (chunk in docsToDelete.chunked(500)) {
+                    val batch = firestore.batch()
+                    for (ref in chunk) {
+                        batch.delete(ref)
+                    }
+                    batch.commit().await()
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
