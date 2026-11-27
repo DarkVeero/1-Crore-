@@ -80,7 +80,6 @@ import com.example.announcements.AnnouncementLaunchRequest
 import com.example.announcements.AnnouncementOwnerConfig
 import com.example.data.DuroodRepository
 import com.example.floating.FloatingCounterManager
-import com.example.notifications.ReminderScheduler
 import com.example.ui.auth.AuthFlowStore
 import com.example.ui.auth.AuthScreen
 import com.example.ui.auth.LinkPasswordScreen
@@ -106,7 +105,6 @@ import com.example.ui.screens.SplashSessionGuard
 import com.example.ui.screens.StatsScreen
 import com.example.ui.theme.AppThemeColors
 import com.example.widget.OneCroreWidgetProvider
-import com.example.widget.WidgetAndFloatingBridge
 import com.google.firebase.Firebase
 import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
