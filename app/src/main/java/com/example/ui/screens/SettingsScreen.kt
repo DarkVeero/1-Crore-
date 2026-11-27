@@ -1103,22 +1103,24 @@ fun DeleteAccountConfirmDialog(
                     style = MaterialTheme.typography.bodyMedium,
                     color = palette.onCardSubtext
                 )
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = {
-                        password = it
-                        passwordError = null
-                    },
-                    label = { Text("Enter Password") },
-                    singleLine = true,
-                    isError = passwordError != null,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    colors = appOutlinedTextFieldColors(),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("delete_account_password_input")
-                )
+                if (!isGoogleOnly) {
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = {
+                            password = it
+                            passwordError = null
+                        },
+                        label = { Text("Enter Password") },
+                        singleLine = true,
+                        isError = passwordError != null,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        colors = appOutlinedTextFieldColors(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("delete_account_password_input")
+                    )
+                }
                 if (passwordError != null) {
                     Text(
                         text = passwordError.orEmpty(),
