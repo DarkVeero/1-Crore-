@@ -271,6 +271,10 @@ object GroupRepository {
     suspend fun flushDirtyGroupsToCloud(context: Context, userId: String) {
         if (userId.isBlank()) return
         val dirtyIds = getDirtyGroupSyncIds(context).toList()
+        // R3-P2-23: only reset the floating batch counter when every dirty
+        // id was actually cleared. Resetting on a failed flush meant the next
+        // batch-triggered flush needed another 100 taps.
+        var allFlushed = true
         dirtyIds.forEach { groupId ->
             val group = getGroupById(context, groupId)
             val isMember = group?.members?.any { it.userId == userId } == true
@@ -281,11 +285,15 @@ object GroupRepository {
                 if (member != null) {
                     if (upsertMemberStatsTransactionBestEffort(context, groupId, member)) {
                         clearGroupDirtyForSync(context, groupId)
+                    } else {
+                        allFlushed = false
                     }
                 }
             }
         }
-        resetFloatingTapBatchCounter(context)
+        if (allFlushed) {
+            resetFloatingTapBatchCounter(context)
+        }
     }
 
     fun snapshotLocalGroups(context: Context): Map<String, GroupItem> {

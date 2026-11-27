@@ -361,7 +361,16 @@ object FloatingCounterManager {
         val savedGroupId = prefs.getString(KEY_TARGET_GROUP_ID, null)
         if (savedMode == MODE_GROUP_WIRE && !savedGroupId.isNullOrBlank()) {
             val group = GroupRepository.getGroupById(appContext, savedGroupId)
-            if (group != null) {
+            // R3-P2-24: the group merely existing locally is not enough — the
+            // user may have left on another device, or the group was deleted
+            // server-side with a stale local copy. Only restore the pill for
+            // a current member. When the user id is not known yet (no stored
+            // active user), defer the decision to syncActiveGroupState instead
+            // of stopping a pill that may still be valid.
+            val userId = WidgetAndFloatingBridge.getStoredActiveUserId(appContext)
+            val knownNonMember = !userId.isNullOrBlank() &&
+                group?.members?.none { it.userId == userId } == true
+            if (group != null && !knownNonMember) {
                 startGroupFloatingButton(appContext, group)
                 return
             }
