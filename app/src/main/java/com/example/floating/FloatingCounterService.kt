@@ -488,27 +488,52 @@ internal object FloatingOverlayController {
 
     private fun handleBubbleTap(appContext: Context, bubble: OneCroreFloatingBubbleView) {
         vibrateTick(appContext, strong = false)
+        val hadPendingFlash = flashClearRunnable != null || FloatingCounterManager.state.value.flashingNumber != null
         flashClearRunnable?.let { mainHandler.removeCallbacks(it) }
+        flashClearRunnable = null
 
         overlayScope.launch {
-            val (resultValue, _) = withContext(Dispatchers.IO) { FloatingCounterManager.onFloatingButtonTapped(appContext) }
-            val latestState = FloatingCounterManager.state.value
-            if (!latestState.isRunning) {
-                removeOverlayViews()
-                return@launch
-            }
-            if (latestState.mode == FloatingTargetMode.GROUP) {
-                bubble.updateFromState(latestState)
-                bubble.triggerTapPulse()
-                syncOverlayPresentation(appContext)
-            } else {
-                bubble.showFlashingNumber(resultValue)
-                val clearRunnable = Runnable {
-                    FloatingCounterManager.onFlashFinished(resultValue)
-                    bubble.fadeBackToLogo()
+            var flashScheduled = false
+            var flashShown = false
+            try {
+                val (resultValue, _) = withContext(Dispatchers.IO) {
+                    FloatingCounterManager.onFloatingButtonTapped(appContext)
                 }
-                flashClearRunnable = clearRunnable
-                mainHandler.postDelayed(clearRunnable, FloatingCounterManager.FLASH_DURATION_MILLIS)
+                val latestState = FloatingCounterManager.state.value
+                if (!latestState.isRunning) {
+                    removeOverlayViews()
+                    return@launch
+                }
+                if (latestState.mode == FloatingTargetMode.GROUP) {
+                    bubble.updateFromState(latestState)
+                    bubble.triggerTapPulse()
+                    syncOverlayPresentation(appContext)
+                } else {
+                    flashShown = true
+                    bubble.showFlashingNumber(resultValue)
+                    val clearRunnable = Runnable {
+                        FloatingCounterManager.onFlashFinished(resultValue)
+                        bubble.fadeBackToLogo()
+                    }
+                    flashClearRunnable = clearRunnable
+                    mainHandler.postDelayed(clearRunnable, FloatingCounterManager.FLASH_DURATION_MILLIS)
+                    flashScheduled = true
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Keep overlay responsive; finally clears any active flash state.
+            } finally {
+                if (!flashScheduled) {
+                    flashClearRunnable?.let { mainHandler.removeCallbacks(it) }
+                    flashClearRunnable = null
+                    FloatingCounterManager.onFlashFinished()
+                    if ((hadPendingFlash || flashShown) &&
+                        FloatingCounterManager.state.value.mode != FloatingTargetMode.GROUP
+                    ) {
+                        bubble.fadeBackToLogo()
+                    }
+                }
             }
         }
     }

@@ -553,6 +553,13 @@ object FloatingCounterManager {
             return updatedTotal to readOnlyMainSnapshot
         }
 
+        val snapshot = WidgetAndFloatingBridge.incrementCountAndSync(
+            context = appContext,
+            delta = 1L,
+            db = db,
+            userIdOverride = userIdOverride,
+            todayKey = todayKey
+        )
         val nextSessionCount = _state.value.sessionCount + 1L
         _state.value = _state.value.copy(
             isRunning = true,
@@ -561,13 +568,6 @@ object FloatingCounterManager {
             flashingNumber = nextSessionCount,
             isDragging = false,
             isOverCloseTarget = false
-        )
-        val snapshot = WidgetAndFloatingBridge.incrementCountAndSync(
-            context = appContext,
-            delta = 1L,
-            db = db,
-            userIdOverride = userIdOverride,
-            todayKey = todayKey
         )
         return nextSessionCount to snapshot
     }
