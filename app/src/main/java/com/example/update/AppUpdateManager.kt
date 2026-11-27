@@ -1202,7 +1202,10 @@ emit(ApkDownloadState.Downloading(downloadId, bytesDownloaded, totalBytes))
                 @Suppress("DEPRECATION")
                 context.packageManager.getPackageArchiveInfo(file.absolutePath, 0)
             }
-            packageInfo != null
+            // R4-D-U1 (full): a parseable APK is not enough — the file must be
+            // OUR app's APK. Without the package-name match, any valid APK
+            // (wrong app, tampered file) passed validation.
+            packageInfo != null && packageInfo.packageName == context.packageName
         } catch (_: Exception) {
             false
         }
