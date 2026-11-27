@@ -265,7 +265,11 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
 
     suspend fun incrementCount(userId: String, dateKey: String = LocalDate.now().toString(), delta: Long) {
         if (delta <= 0L) return
-        dailyDao.incrementDay(userId, dateKey, delta, System.currentTimeMillis())
+        // R4-C9: stamp the day with the target in force now, so History judges
+        // this day by its own target even if the user changes it later.
+        val target = profileDao.getProfile(userId)?.dailyTarget?.takeIf { it > 0 }
+            ?: DEFAULT_DAILY_TARGET
+        dailyDao.incrementDay(userId, dateKey, delta, System.currentTimeMillis(), target = target)
     }
 
     suspend fun setDayCount(userId: String, dateKey: String, newCount: Long) {
@@ -417,6 +421,12 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
                     expectedDayCounts[dateKey] = localExisting.count
                 } else {
                     val mergedCount = maxOf(localExisting?.count ?: 0L, backupCount)
+                    // R4-C9: restore the day's own target from the backup when present,
+                    // else keep the local row's target, else the profile target.
+                    val restoredTarget = payload.dayDailyTargets[dateKey]?.takeIf { it > 0 }
+                        ?: localExisting?.dailyTarget?.takeIf { it > 0 }
+                        ?: existingProfile?.dailyTarget?.takeIf { it > 0 }
+                        ?: DEFAULT_DAILY_TARGET
                     dailyDao.upsertDay(
                         DailyCountEntity(
                             userId = userId,
@@ -424,7 +434,8 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
                             count = mergedCount,
                             pendingSync = true,
                             isManualEdit = false,
-                            updatedAtMillis = maxOf(now, backupUpdatedAtMillis ?: 0L)
+                            updatedAtMillis = maxOf(now, backupUpdatedAtMillis ?: 0L),
+                            dailyTarget = restoredTarget
                         )
                     )
                     expectedDayCounts[dateKey] = mergedCount
@@ -691,7 +702,8 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
                     todayDateKey = todayDateKey,
                     local = local,
                     cloudCount = cloudDay.count.coerceAtLeast(0L),
-                    cloudUpdatedAtMillis = cloudDay.clientUpdatedAt
+                    cloudUpdatedAtMillis = cloudDay.clientUpdatedAt,
+                    cloudDailyTarget = cloudDay.dailyTarget
                 )
                 if (resolved != local) {
                     dailyDao.upsertDay(resolved)
@@ -924,11 +936,13 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
             .collection("daily_counts").document(day.dateKey)
 
         if (existsInCloud) {
-            val updatePayload = mapOf(
+            val updatePayload = mutableMapOf<String, Any>(
                 "count" to day.count,
                 "clientUpdatedAt" to day.updatedAtMillis,
                 "updatedAt" to FieldValue.serverTimestamp()
             )
+            // R4-C9: sync the day's own target; never overwrite a recorded target with 0.
+            if (day.dailyTarget > 0) updatePayload["dailyTarget"] = day.dailyTarget
             try {
                 docRef.update(updatePayload).await()
             } catch (e: CancellationException) {
@@ -938,7 +952,7 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
                 throw e
             }
         } else {
-            val createPayload = mapOf(
+            val createPayload = mutableMapOf<String, Any>(
                 "userId" to uid,
                 "dateKey" to day.dateKey,
                 "count" to day.count,
@@ -946,6 +960,8 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
                 "createdAt" to FieldValue.serverTimestamp(),
                 "updatedAt" to FieldValue.serverTimestamp()
             )
+            // R4-C9: a new cloud day carries the target recorded on the device.
+            if (day.dailyTarget > 0) createPayload["dailyTarget"] = day.dailyTarget
             try {
                 docRef.set(createPayload).await()
             } catch (e: CancellationException) {
@@ -973,16 +989,18 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
                     val cloudCount = (snap.getLong("count") ?: 0L).coerceAtLeast(0L)
                     val targetCount = if (day.isManualEdit) day.count else maxOf(day.count, cloudCount)
                     if (targetCount != cloudCount || day.isManualEdit) {
-                        val updatePayload = mapOf(
+                        val updatePayload = mutableMapOf<String, Any>(
                             "count" to targetCount,
                             "clientUpdatedAt" to day.updatedAtMillis,
                             "updatedAt" to FieldValue.serverTimestamp()
                         )
+                        // R4-C9: sync the day's own target; never overwrite it with 0.
+                        if (day.dailyTarget > 0) updatePayload["dailyTarget"] = day.dailyTarget
                         tx.update(docRef, updatePayload)
                     }
                     targetCount
                 } else {
-                    val createPayload = mapOf(
+                    val createPayload = mutableMapOf<String, Any>(
                         "userId" to uid,
                         "dateKey" to day.dateKey,
                         "count" to day.count,
@@ -990,6 +1008,8 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
                         "createdAt" to FieldValue.serverTimestamp(),
                         "updatedAt" to FieldValue.serverTimestamp()
                     )
+                    // R4-C9: a new cloud day carries the target recorded on the device.
+                    if (day.dailyTarget > 0) createPayload["dailyTarget"] = day.dailyTarget
                     tx.set(docRef, createPayload)
                     day.count
                 }
@@ -2004,7 +2024,8 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
             todayDateKey: String,
             local: DailyCountEntity?,
             cloudCount: Long,
-            cloudUpdatedAtMillis: Long
+            cloudUpdatedAtMillis: Long,
+            cloudDailyTarget: Int = 0
         ): DailyCountEntity {
             val safeCloudCount = cloudCount.coerceAtLeast(0L)
             if (local == null) {
@@ -2014,9 +2035,14 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
                     count = safeCloudCount,
                     pendingSync = false,
                     isManualEdit = false,
-                    updatedAtMillis = cloudUpdatedAtMillis
+                    updatedAtMillis = cloudUpdatedAtMillis,
+                    // R4-C9: a cloud-only day keeps the target the cloud recorded.
+                    dailyTarget = cloudDailyTarget
                 )
             }
+            // R4-C9: keep the day's recorded target; adopt the cloud's target only
+            // when this device never recorded one for the day.
+            val resolvedTarget = local.dailyTarget.takeIf { it > 0 } ?: cloudDailyTarget
             val isToday = dateKey == todayDateKey
             return if (isToday) {
                 // Today -> same rule as past days: the larger count wins; cloud NEVER overwrites local with a smaller number
@@ -2025,7 +2051,8 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
                     count = resolved,
                     pendingSync = local.count > safeCloudCount,
                     isManualEdit = false,
-                    updatedAtMillis = if (safeCloudCount > local.count) maxOf(local.updatedAtMillis, cloudUpdatedAtMillis) else local.updatedAtMillis
+                    updatedAtMillis = if (safeCloudCount > local.count) maxOf(local.updatedAtMillis, cloudUpdatedAtMillis) else local.updatedAtMillis,
+                    dailyTarget = resolvedTarget
                 )
             } else {
                 // Past days -> the larger count wins; cloud NEVER overwrites local with a smaller number
@@ -2034,15 +2061,18 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
                         count = safeCloudCount,
                         pendingSync = false,
                         isManualEdit = false,
-                        updatedAtMillis = maxOf(local.updatedAtMillis, cloudUpdatedAtMillis)
+                        updatedAtMillis = maxOf(local.updatedAtMillis, cloudUpdatedAtMillis),
+                        dailyTarget = resolvedTarget
                     )
                     local.count > safeCloudCount -> local.copy(
                         count = local.count,
-                        pendingSync = true
+                        pendingSync = true,
+                        dailyTarget = resolvedTarget
                     )
                     else -> local.copy(
                         pendingSync = false,
-                        isManualEdit = false
+                        isManualEdit = false,
+                        dailyTarget = resolvedTarget
                     )
                 }
             }

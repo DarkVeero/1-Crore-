@@ -288,7 +288,10 @@ private fun HistoryRow(
 ) {
     val palette = AppThemeColors.palette
     val dateLabel = formatDateLabel(day.dateKey, today)
-    val targetMet = day.count >= dailyTarget.toLong()
+    // R4-C9: judge this day by the target in force on THAT day; only fall back
+    // to today's target for old rows that never recorded one.
+    val dayTarget = day.dailyTarget.takeIf { it > 0 } ?: dailyTarget
+    val targetMet = day.count >= dayTarget.toLong()
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -308,7 +311,7 @@ private fun HistoryRow(
             )
             Text(
                 text = buildString {
-                    append(if (targetMet) "Target complete" else "${formatNumber((dailyTarget - day.count).coerceAtLeast(0L))} short of target")
+                    append(if (targetMet) "Target complete" else "${formatNumber((dayTarget - day.count).coerceAtLeast(0L))} short of target")
                     if (day.pendingSync) append(" · Pending sync")
                 },
                 style = MaterialTheme.typography.labelMedium,

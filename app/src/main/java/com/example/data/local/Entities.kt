@@ -31,7 +31,13 @@ data class DailyCountEntity(
     val count: Long,
     val pendingSync: Boolean = true,
     val isManualEdit: Boolean = false,
-    val updatedAtMillis: Long = System.currentTimeMillis()
+    val updatedAtMillis: Long = System.currentTimeMillis(),
+    /**
+     * The daily target that was in force when this day was recorded (R4-C9).
+     * 0 = not recorded (rows written before this field existed) — History falls
+     * back to the current setting's target for those days.
+     */
+    val dailyTarget: Int = 0
 )
 
 @Entity(tableName = "custom_counters")

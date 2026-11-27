@@ -29,7 +29,9 @@ data class BackupPayload(
     val themeMode: String? = null,
     val droppedDays: Int = 0,
     val droppedCounters: Int = 0,
-    val dayUpdatedAtMillis: Map<String, Long> = emptyMap()
+    val dayUpdatedAtMillis: Map<String, Long> = emptyMap(),
+    // R4-C9: the daily target in force on each day, so a restore keeps each day's own target.
+    val dayDailyTargets: Map<String, Int> = emptyMap()
 )
 
 object BackupCodec {
@@ -76,6 +78,10 @@ object BackupCodec {
                     if (day.updatedAtMillis > 0L) {
                         put("updatedAtMillis", day.updatedAtMillis)
                     }
+                    // R4-C9: carry the day's own target so a restore keeps it.
+                    if (day.dailyTarget > 0) {
+                        put("dailyTarget", day.dailyTarget)
+                    }
                 })
             }
             put("dailyCounts", arr)
@@ -99,6 +105,7 @@ object BackupCodec {
         val profileObj = root.optJSONObject("profile")
         val arr = root.optJSONArray("dailyCounts") ?: JSONArray()
         val dayUpdatedAtMillisMap = mutableMapOf<String, Long>()
+        val dayDailyTargetsMap = mutableMapOf<String, Int>()
         val days = buildList {
             for (i in 0 until arr.length()) {
                 val item = arr.optJSONObject(i) ?: continue
@@ -110,6 +117,13 @@ object BackupCodec {
                         val updatedAt = item.optLong("updatedAtMillis", 0L)
                         if (updatedAt > 0L) {
                             dayUpdatedAtMillisMap[dateKey] = updatedAt
+                        }
+                    }
+                    // R4-C9: a day's own target, when the backup recorded one.
+                    if (item.has("dailyTarget")) {
+                        val dayTarget = item.optInt("dailyTarget", 0)
+                        if (dayTarget in 1..10_000_000) {
+                            dayDailyTargetsMap[dateKey] = dayTarget
                         }
                     }
                 }
@@ -148,7 +162,8 @@ object BackupCodec {
             themeMode = profileObj?.optString("themeMode")?.takeIf { it.isNotBlank() }?.let {
                 com.example.ui.theme.AppThemeMode.fromStorageKey(it).storageKey
             },
-            dayUpdatedAtMillis = dayUpdatedAtMillisMap
+            dayUpdatedAtMillis = dayUpdatedAtMillisMap,
+            dayDailyTargets = dayDailyTargetsMap
         )
     }
 
@@ -186,7 +201,8 @@ object BackupCodec {
                     userId = "verify_gate",
                     dateKey = dateKey,
                     count = count,
-                    updatedAtMillis = firstPass.dayUpdatedAtMillis[dateKey] ?: 0L
+                    updatedAtMillis = firstPass.dayUpdatedAtMillis[dateKey] ?: 0L,
+                    dailyTarget = firstPass.dayDailyTargets[dateKey] ?: 0
                 )
             }
             val syntheticCounters = firstPass.customCounters.map { c ->
@@ -206,6 +222,10 @@ object BackupCodec {
             }
             if (firstPass.dayUpdatedAtMillis != secondPass.dayUpdatedAtMillis) {
                 return Result.failure(IllegalStateException("Backup restore-test gate failed: day updatedAtMillis mismatch."))
+            }
+            // R4-C9: per-day targets must survive the round-trip too.
+            if (firstPass.dayDailyTargets != secondPass.dayDailyTargets) {
+                return Result.failure(IllegalStateException("Backup restore-test gate failed: day dailyTarget mismatch."))
             }
             if (firstPass.customCounters != secondPass.customCounters) {
                 return Result.failure(IllegalStateException("Backup restore-test gate failed: custom counters mismatch."))

@@ -76,10 +76,14 @@ interface DailyCountDao {
     suspend fun upsertDays(entities: List<DailyCountEntity>)
 
     @Transaction
-    suspend fun incrementDay(userId: String, dateKey: String, delta: Long, nowMillis: Long) {
+    suspend fun incrementDay(userId: String, dateKey: String, delta: Long, nowMillis: Long, target: Int = 0) {
         if (delta <= 0L) return
         val existing = getDay(userId, dateKey)
         val newCount = ((existing?.count ?: 0L) + delta).coerceIn(0L, 100_000_000L)
+        // R4-C9: stamp the day with the target in force when it is first created;
+        // later increments keep the recorded target (never overwrite it with
+        // today's target, or History would re-judge old days).
+        val resolvedTarget = (existing?.dailyTarget ?: 0).takeIf { it > 0 } ?: target
         upsertDay(
             DailyCountEntity(
                 userId = userId,
@@ -87,7 +91,8 @@ interface DailyCountDao {
                 count = newCount,
                 pendingSync = true,
                 isManualEdit = existing?.isManualEdit ?: false,
-                updatedAtMillis = nowMillis
+                updatedAtMillis = nowMillis,
+                dailyTarget = resolvedTarget
             )
         )
     }
@@ -104,13 +109,15 @@ interface DailyCountDao {
                 count = newCount,
                 pendingSync = true,
                 isManualEdit = true,
-                updatedAtMillis = nowMillis
+                updatedAtMillis = nowMillis,
+                dailyTarget = existing?.dailyTarget ?: 0
             )
         )
     }
 
     @Transaction
     suspend fun setDayCount(userId: String, dateKey: String, count: Long, nowMillis: Long) {
+        val existing = getDay(userId, dateKey)
         upsertDay(
             DailyCountEntity(
                 userId = userId,
@@ -118,7 +125,8 @@ interface DailyCountDao {
                 count = count.coerceIn(0L, 100_000_000L),
                 pendingSync = true,
                 isManualEdit = true,
-                updatedAtMillis = nowMillis
+                updatedAtMillis = nowMillis,
+                dailyTarget = existing?.dailyTarget ?: 0
             )
         )
     }

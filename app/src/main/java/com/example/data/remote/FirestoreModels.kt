@@ -29,6 +29,8 @@ data class FirestoreDailyCount(
     val dateKey: String = "",
     val count: Long = 0L,
     val clientUpdatedAt: Long = 0L,
+    // R4-C9: the daily target in force when this day was recorded (0 = not recorded).
+    val dailyTarget: Int = 0,
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 )
