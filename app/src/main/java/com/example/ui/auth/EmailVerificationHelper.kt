@@ -121,7 +121,20 @@ object EmailVerificationAutoSender {
         profileReadySignals.getOrPut(uid) { CompletableDeferred() }.complete(Unit)
     }
 
-    fun clearForUser(uid: String?) {
+    private fun clearPersistedAutoSentUid(context: Context, uid: String?) {
+        val prefs = context.applicationContext
+            .getSharedPreferences(AUTO_SENT_PREFS_NAME, Context.MODE_PRIVATE)
+        if (uid.isNullOrBlank()) {
+            prefs.edit().remove(KEY_AUTO_SENT_UIDS).apply()
+        } else {
+            val sent = (prefs.getStringSet(KEY_AUTO_SENT_UIDS, emptySet()) ?: emptySet()).toMutableSet()
+            if (sent.remove(uid)) {
+                prefs.edit().putStringSet(KEY_AUTO_SENT_UIDS, sent).apply()
+            }
+        }
+    }
+
+    fun clearForUser(context: Context, uid: String?) {
         if (uid.isNullOrBlank()) {
             profileReadySignals.clear()
             autoSentUids.clear()
@@ -129,6 +142,11 @@ object EmailVerificationAutoSender {
             profileReadySignals.remove(uid)
             autoSentUids.remove(uid)
         }
+        // R4-D3: the persisted marker must go too. Without this, a user who
+        // signs out unverified and signs back in would never get the
+        // auto-sent verification email again (ensureAutoSent trusts the
+        // persisted marker), even though they are still unverified.
+        clearPersistedAutoSentUid(context, uid)
     }
 
     suspend fun ensureAutoSent(

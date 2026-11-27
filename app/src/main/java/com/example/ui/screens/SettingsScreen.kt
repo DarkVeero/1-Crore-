@@ -636,7 +636,7 @@ fun SettingsScreen(
                         onClick = {
                             showLogoutDialog = false
                             ReminderScheduler.cancelAll(context)
-                            signOutUser(credentialManager, scope)
+                            signOutUser(context, credentialManager, scope)
                         }
                     )
                 }
@@ -671,7 +671,7 @@ fun SettingsScreen(
                     } catch (_: Exception) {
                     }
                     onDeleteAccount {
-                        signOutUser(credentialManager, scope)
+                        signOutUser(context, credentialManager, scope)
                     }
                 }
             }

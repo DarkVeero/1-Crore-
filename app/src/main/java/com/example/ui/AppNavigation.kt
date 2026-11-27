@@ -320,6 +320,7 @@ fun AppNavigation(
                         WidgetAndFloatingBridge.setActiveUserId(context, null)
                         ReminderScheduler.cancelAll(context)
                         signOutUser(
+                            context = context,
                             credentialManager = credentialManager,
                             scope = scope,
                             onSignOutComplete = {
@@ -365,6 +366,7 @@ fun AppNavigation(
                         WidgetAndFloatingBridge.setActiveUserId(context, null)
                         ReminderScheduler.cancelAll(context)
                         signOutUser(
+                            context = context,
                             credentialManager = credentialManager,
                             scope = scope,
                             onSignOutComplete = {

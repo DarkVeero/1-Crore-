@@ -465,6 +465,7 @@ fun onGoogleSignInClicked(
 }
 
 fun signOutUser(
+    context: Context,
     credentialManager: CredentialManager,
     scope: CoroutineScope,
     onSignOutComplete: () -> Unit = {}
@@ -478,7 +479,7 @@ fun signOutUser(
             } finally {
                 val signingOutUid = Firebase.auth.currentUser?.uid
                 AuthFlowStore.clearFreshLogin(signingOutUid)
-                EmailVerificationAutoSender.clearForUser(signingOutUid)
+                EmailVerificationAutoSender.clearForUser(context, signingOutUid)
                 Firebase.auth.signOut()
                 onSignOutComplete()
             }
