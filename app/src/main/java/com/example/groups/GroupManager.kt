@@ -1429,6 +1429,13 @@ object GroupRepository {
         val fsCode = (error as? FirebaseFirestoreException)?.code
         return when (fsCode) {
             FirebaseFirestoreException.Code.NOT_FOUND -> InviteLookupOutcome.NotFound
+            // Round 1 P2-5: PERMISSION_DENIED is the KNOWN state, not the
+            // internet — groups have no Firestore rule yet, so a code from
+            // another phone can never be checked. Saying "check internet"
+            // sent users with working internet retrying a dead code forever.
+            FirebaseFirestoreException.Code.PERMISSION_DENIED -> InviteLookupOutcome.Error(
+                "Group codes from another phone can't be checked yet — groups are saved on this phone only."
+            )
             else -> InviteLookupOutcome.Error("Couldn't check invite code right now. Check internet and try again.")
         }
     }
