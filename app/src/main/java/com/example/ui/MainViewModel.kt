@@ -52,6 +52,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
@@ -647,7 +648,14 @@ class MainViewModel(
         viewModelScope.launch {
             while (true) {
                 delay(AUTO_SYNC_INTERVAL_MILLIS)
-                if (NetworkMonitor.isCurrentlyOnline(appContext) && uiState.value.hasPendingSync) {
+                // R3-P2-32: uiState is stateIn(WhileSubscribed(5000)) — once
+                // the UI stops collecting (app backgrounded) its value
+                // freezes, so the loop tested a stale flag and background
+                // auto-sync silently stopped. Read the repo directly.
+                val hasPendingSync = runCatching {
+                    repository.observeHasPendingSync(currentUserId).first()
+                }.getOrDefault(false)
+                if (NetworkMonitor.isCurrentlyOnline(appContext) && hasPendingSync) {
                     triggerSync(silent = true)
                 }
             }
@@ -836,8 +844,9 @@ class MainViewModel(
         val hasDirtyGroups = GroupRepository.getDirtyGroupSyncIds(appContext).isNotEmpty()
         SyncWorker.enqueueWhenOnline(appContext)
         if ((uiState.value.hasPendingSync || hasDirtyGroups) && NetworkMonitor.isCurrentlyOnline(appContext)) {
+            // R3-P2-33: triggerSync resets the batch counter on success; do
+            // not zero it here on attempt.
             triggerSync(silent = true)
-            unsyncedTapCount = 0
         }
     }
 
@@ -870,7 +879,7 @@ class MainViewModel(
     ) {
         val cleanName = name.trim()
         if (cleanName.isEmpty() || targetCount <= 0L) return
-        viewModelScope.launch {
+        launchSafe {
             val id = repository.createCustomCounter(currentUserId, cleanName, targetCount)
             onCreated(id)
             SyncWorker.enqueueWhenOnline(appContext)
@@ -896,7 +905,7 @@ class MainViewModel(
 
     fun onAddCustomCounterAmount(counterId: String, amount: Long) {
         if (amount <= 0L) return
-        viewModelScope.launch {
+        launchSafe {
             repository.incrementCustomCounter(currentUserId, counterId, amount)
             SyncWorker.enqueueWhenOnline(appContext)
             if (NetworkMonitor.isCurrentlyOnline(appContext)) {
@@ -1032,9 +1041,6 @@ class MainViewModel(
     }
 
     fun triggerSync(silent: Boolean = false) {
-        unsyncedTapCount = 0
-        WidgetAndFloatingBridge.resetUnsyncedTapCount(appContext)
-
         val now = System.currentTimeMillis()
         val currentJob = syncJob
         val isReallyActive = currentJob?.isActive == true
@@ -1078,6 +1084,12 @@ class MainViewModel(
                 } ?: Result.failure(TimeoutException("Sync timed out"))
 
                 if (result.isSuccess) {
+                    // R3-P2-33: reset the batch counters only on a successful
+                    // sync — resetting on attempt meant a failed/offline sync
+                    // wiped the counter and the next batch sync needed 100
+                    // fresh taps.
+                    unsyncedTapCount = 0
+                    WidgetAndFloatingBridge.resetUnsyncedTapCount(appContext)
                     val profile = repository.getProfileOnce(currentUserId)
                     if (profile != null && !hadPendingSyncBefore && !profile.pendingSync) {
                         ThemePreferenceStore.setThemeMode(
