@@ -15,6 +15,11 @@ import com.example.MainActivity
 import com.example.R
 import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 data class AnnouncementLaunchRequest(
     val announcementId: String,
@@ -37,6 +42,11 @@ object AnnouncementNotificationHelper {
     private const val PREFS_NAME = "one_crore_announcement_push_prefs"
     private const val KEY_TOPIC_SUBSCRIBED = "topic_announcements_subscribed"
     private const val KEY_PERMISSION_REQUESTED = "post_notifications_permission_requested"
+    // R4-D11: retries for a failed topic subscribe (30s, 2m, 5m). Before this,
+    // a failure was swallowed entirely and the next attempt only happened on
+    // the next Home open.
+    private const val MAX_TOPIC_SUBSCRIBE_RETRIES = 3
+    private val topicRetryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun ensureNotificationChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -54,7 +64,13 @@ object AnnouncementNotificationHelper {
     }
 
     fun ensureSubscribedToAnnouncementsTopic(context: Context) {
+        subscribeToAnnouncementsTopic(context, attempt = 0)
+    }
+
+    private fun subscribeToAnnouncementsTopic(context: Context, attempt: Int) {
         val appContext = context.applicationContext
+        // Already subscribed (and recorded) — no need to subscribe again.
+        if (isTopicSubscribedRecorded(appContext)) return
         try {
             if (FirebaseApp.getApps(appContext).isEmpty()) {
                 FirebaseApp.initializeApp(appContext)
@@ -64,8 +80,26 @@ object AnnouncementNotificationHelper {
                 .addOnSuccessListener {
                     markTopicSubscribed(appContext)
                 }
+                .addOnFailureListener {
+                    scheduleTopicSubscribeRetry(appContext, attempt)
+                }
         } catch (_: Exception) {
             // Safe no-op in headless unit test environments without Play Services
+            scheduleTopicSubscribeRetry(appContext, attempt)
+        }
+    }
+
+    private fun scheduleTopicSubscribeRetry(context: Context, failedAttempt: Int) {
+        val nextAttempt = failedAttempt + 1
+        if (nextAttempt > MAX_TOPIC_SUBSCRIBE_RETRIES) return
+        val delayMillis = when (nextAttempt) {
+            1 -> 30_000L
+            2 -> 120_000L
+            else -> 300_000L
+        }
+        topicRetryScope.launch {
+            delay(delayMillis)
+            subscribeToAnnouncementsTopic(context, nextAttempt)
         }
     }
 
