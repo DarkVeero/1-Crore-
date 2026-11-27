@@ -11,9 +11,7 @@ import com.example.data.local.AppDatabase
 import com.example.widget.WidgetAndFloatingBridge
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -21,7 +19,6 @@ import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import java.util.concurrent.ConcurrentHashMap
 
 class ScheduledAnnouncementReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
@@ -49,7 +46,6 @@ object AnnouncementScheduledDispatcher {
     const val EXTRA_SCHEDULED_ANNOUNCEMENT_ID = "extra_scheduled_announcement_id"
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private val inProcessJobs = ConcurrentHashMap<String, Job>()
 
     private val _dueAnnouncementEvents = MutableSharedFlow<String>(extraBufferCapacity = 16)
     val dueAnnouncementEvents: SharedFlow<String> = _dueAnnouncementEvents.asSharedFlow()
@@ -63,7 +59,6 @@ object AnnouncementScheduledDispatcher {
         AnnouncementScheduleStore.saveAnnouncement(appContext, item)
         val triggerAt = item.effectiveStartAtMillis
         if (triggerAt <= nowMillis) {
-            inProcessJobs.remove(item.id)?.cancel()
             scope.launch {
                 dispatchDueAnnouncements(
                     context = appContext,
@@ -72,8 +67,10 @@ object AnnouncementScheduledDispatcher {
                 )
             }
         } else {
+            // R4-D1: exactly ONE trigger — the AlarmManager alarm. It fires whether
+            // or not the app is alive (the receiver dispatches), so a second
+            // in-process timer only created a double-dispatch race.
             scheduleAlarmManagerTrigger(appContext, item.id, triggerAt)
-            scheduleInProcessTimer(appContext, item.id, triggerAt - nowMillis)
         }
     }
 
@@ -96,28 +93,10 @@ object AnnouncementScheduledDispatcher {
                     )
                 }
             } else {
+                // R4-D1: exactly ONE trigger — the AlarmManager alarm (see above).
                 scheduleAlarmManagerTrigger(appContext, item.id, triggerAt)
-                scheduleInProcessTimer(appContext, item.id, triggerAt - nowMillis)
             }
         }
-    }
-
-    private fun scheduleInProcessTimer(
-        context: Context,
-        announcementId: String,
-        delayMillis: Long
-    ) {
-        inProcessJobs.remove(announcementId)?.cancel()
-        val safeDelay = delayMillis.coerceAtLeast(10L)
-        val job = scope.launch {
-            delay(safeDelay)
-            dispatchDueAnnouncements(
-                context = context.applicationContext,
-                nowMillis = System.currentTimeMillis(),
-                specificAnnouncementId = announcementId
-            )
-        }
-        inProcessJobs[announcementId] = job
     }
 
     private fun scheduleAlarmManagerTrigger(
@@ -240,7 +219,6 @@ object AnnouncementScheduledDispatcher {
                 .thenByDescending { it.effectiveStartAtMillis }
                 .thenBy { it.id }
         )) {
-            inProcessJobs.remove(item.id)?.cancel()
             if (!AnnouncementFrequencyStore.isEligibleForPush(
                     context = appContext,
                     userId = userId,
@@ -281,8 +259,6 @@ object AnnouncementScheduledDispatcher {
     }
 
     fun resetForTest(context: Context) {
-        inProcessJobs.values.forEach { it.cancel() }
-        inProcessJobs.clear()
         AnnouncementScheduleStore.resetForTest(context)
     }
 }
