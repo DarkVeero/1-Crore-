@@ -647,6 +647,7 @@ object AnnouncementScheduleStore {
  */
 object AnnouncementFrequencyStore {
     private const val PREFS_NAME = "one_crore_announcements_prefs"
+    private const val KEY_DAILY_CAP = "configured_max_shows_per_day"
     const val SEVEN_DAYS_MILLIS = 7L * 24L * 60L * 60L * 1000L
     const val MIN_SHOW_INTERVAL_MILLIS = AnnouncementItem.MIN_SHOW_INTERVAL_MILLIS
     const val MIN_CONFIGURABLE_DAILY_CAP = AnnouncementItem.MIN_CONFIGURABLE_DAILY_CAP
@@ -660,6 +661,20 @@ object AnnouncementFrequencyStore {
         set(value) {
             field = value.coerceIn(MIN_CONFIGURABLE_DAILY_CAP, MAX_CONFIGURABLE_DAILY_CAP)
         }
+
+    // R4-D9: the 3..5/day cap is a real owner setting now, persisted here and
+    // loaded at app start — it used to be a var nothing ever set, so the
+    // "configurable" claim was dead and the cap was always 3 in practice.
+    fun loadPersistedDailyCap(context: Context) {
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        configuredMaxShowsPerDay = prefs.getInt(KEY_DAILY_CAP, DEFAULT_DAILY_CAP)
+    }
+
+    fun setConfiguredMaxShowsPerDay(context: Context, value: Int) {
+        configuredMaxShowsPerDay = value
+        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putInt(KEY_DAILY_CAP, configuredMaxShowsPerDay).apply()
+    }
 
     private fun stateKey(userId: String, announcementId: String): String {
         val safeUser = userId.trim().ifBlank { "default" }

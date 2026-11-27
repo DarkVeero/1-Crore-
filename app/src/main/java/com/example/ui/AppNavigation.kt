@@ -75,6 +75,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.announcements.AnnouncementFrequencyStore
 import com.example.announcements.AnnouncementLaunchRequest
 import com.example.announcements.AnnouncementOwnerConfig
 import com.example.data.DuroodRepository
@@ -826,6 +827,11 @@ internal fun MainTabScaffold(
                     composable(AppTab.SETTINGS.route) {
         val hasPasswordLinked = Firebase.auth.currentUser?.providerData?.any { it.providerId == EmailAuthProvider.PROVIDER_ID } == true
         val credentialManager = CredentialManager.create(context)
+        // R4-D9: the owner's daily announcement cap, kept in state so the
+        // picker reflects the saved value immediately after a change.
+        var announcementDailyCap by remember {
+            mutableStateOf(AnnouncementFrequencyStore.configuredMaxShowsPerDay)
+        }
                         SettingsScreen(
                             uiState = uiState,
                             onUpdateDisplayName = viewModel::onUpdateDisplayName,
@@ -839,6 +845,11 @@ internal fun MainTabScaffold(
                             onDeleteAccount = viewModel::deleteAccount,
                             userEmail = userEmail,
                             onScheduleAnnouncement = viewModel::scheduleOrPublishAnnouncement,
+                            announcementDailyCap = announcementDailyCap,
+                            onAnnouncementDailyCapChange = { value ->
+                                AnnouncementFrequencyStore.setConfiguredMaxShowsPerDay(context, value)
+                                announcementDailyCap = AnnouncementFrequencyStore.configuredMaxShowsPerDay
+                            },
             onVerifyPasswordForDelete = if (hasPasswordLinked) null else { _ -> reauthenticateWithGoogle(context, credentialManager) },
                         )
                     }

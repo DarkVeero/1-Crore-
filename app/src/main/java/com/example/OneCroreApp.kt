@@ -25,6 +25,9 @@ class OneCroreApp : Application(), Configuration.Provider {
             UpdateCheckWorker.scheduleDailyCheck(this@OneCroreApp)
             com.example.sync.SyncWorker.enqueuePeriodicSync(this@OneCroreApp)
             ReminderScheduler.rescheduleFromSavedStateIfPossible(this@OneCroreApp)
+            // R4-D9: load the owner's saved daily announcement cap before any
+            // dispatch decision runs.
+            com.example.announcements.AnnouncementFrequencyStore.loadPersistedDailyCap(this@OneCroreApp)
             com.example.announcements.AnnouncementScheduledDispatcher.reschedulePendingAnnouncements(this@OneCroreApp)
             runCatching {
                 val repo = com.example.data.DuroodRepository(

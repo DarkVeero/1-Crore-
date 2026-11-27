@@ -29,6 +29,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -61,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
+import com.example.announcements.AnnouncementFrequencyStore
 import com.example.announcements.AnnouncementItem
 import com.example.announcements.AnnouncementOwnerConfig
 import com.example.data.DuroodRepository
@@ -105,7 +108,10 @@ fun SettingsScreen(
     onDeleteAccount: (() -> Unit) -> Unit,
     onVerifyPasswordForDelete: (suspend (String) -> Result<Unit>)? = null,
     userEmail: String? = null,
-    onScheduleAnnouncement: (AnnouncementItem) -> Unit = {}
+    onScheduleAnnouncement: (AnnouncementItem) -> Unit = {},
+    // R4-D9: the daily announcement cap is a real owner setting (3..5/day).
+    announcementDailyCap: Int = AnnouncementFrequencyStore.DEFAULT_DAILY_CAP,
+    onAnnouncementDailyCapChange: (Int) -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -525,6 +531,49 @@ fun SettingsScreen(
                         onClick = { showScheduleAnnouncementDialog = true },
                         testTag = "settings_schedule_announcement_row"
                     )
+                    // R4-D9: how many announcements may show per day (3..5).
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Announcements per day",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = palette.onCard
+                            )
+                            Text(
+                                text = "Max pop-ups & pushes shown daily",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = palette.onCardSubtext
+                            )
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            (AnnouncementFrequencyStore.MIN_CONFIGURABLE_DAILY_CAP..AnnouncementFrequencyStore.MAX_CONFIGURABLE_DAILY_CAP).forEach { value ->
+                                FilterChip(
+                                    selected = announcementDailyCap == value,
+                                    onClick = { onAnnouncementDailyCapChange(value) },
+                                    label = { Text("$value") },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        containerColor = palette.cardSurface,
+                                        labelColor = palette.onCard,
+                                        selectedContainerColor = palette.accent,
+                                        selectedLabelColor = palette.onAccent
+                                    ),
+                                    border = FilterChipDefaults.filterChipBorder(
+                                        enabled = true,
+                                        selected = announcementDailyCap == value,
+                                        borderColor = palette.hairline,
+                                        selectedBorderColor = palette.accent
+                                    ),
+                                    modifier = Modifier.testTag("settings_announcement_daily_cap_$value")
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
