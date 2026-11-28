@@ -1098,7 +1098,12 @@ emit(ApkDownloadState.Downloading(downloadId, bytesDownloaded = 0L, totalBytes =
                         if (bytesDownloaded > lastProgressBytes) {
                         lastProgressBytes = bytesDownloaded
                         lastProgressAtMillis = System.currentTimeMillis()
-                    } else if (status == DownloadManager.STATUS_RUNNING && System.currentTimeMillis() - lastProgressAtMillis > 60_000L) {
+                    // Round 1 U-P2-4: the stall timeout used to cover only
+                    // STATUS_RUNNING, so a PAUSED (e.g. waiting for network)
+                    // or PENDING download sat on "Downloading..." forever with
+                    // no progress and no error. No bytes for 60s in ANY
+                    // non-terminal state now fails with a clear message.
+                    } else if (System.currentTimeMillis() - lastProgressAtMillis > 60_000L) {
                         runCatching { dm.remove(downloadId) }
                         runCatching { if (destFile.exists()) destFile.delete() }
                         appContext.updatePrefs.edit { it.remove(KEY_PENDING_DOWNLOAD_ID) }
