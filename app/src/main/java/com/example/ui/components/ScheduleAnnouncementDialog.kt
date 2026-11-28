@@ -77,6 +77,9 @@ fun ScheduleAnnouncementDialog(
     nowProvider: () -> Long = { System.currentTimeMillis() }
 ) {
     val palette = AppThemeColors.palette
+    // Round 1 A-P3: the daily cap is configurable (3..5, R4-D9) — the hint
+    // used to hardcode "3/day" even when the owner had set 4 or 5.
+    val dailyCap = AnnouncementFrequencyStore.configuredMaxShowsPerDay
     val zoneId = remember { ZoneId.systemDefault() }
     val initialNow = remember {
         Instant.ofEpochMilli(nowProvider()).atZone(zoneId).toLocalDateTime().plusMinutes(2)
@@ -141,9 +144,9 @@ fun ScheduleAnnouncementDialog(
                 )
                 Text(
                     text = if (isUrgent) {
-                        "URGENT: bypasses 10-min gap, 3/day and 21/week caps; shows immediately."
+                        "URGENT: bypasses 10-min gap, $dailyCap/day and 21/week caps; shows immediately."
                     } else {
-                        "Respects 10-min gap, max 3/day and 21/week caps."
+                        "Respects 10-min gap, max $dailyCap/day and 21/week caps."
                     },
                     style = MaterialTheme.typography.labelMedium,
                     color = if (isUrgent) palette.accent else palette.onCardSubtext,
@@ -388,7 +391,7 @@ fun ScheduleAnnouncementDialog(
                                 }
                             }
                             Text(
-                                text = "Bypass 10-min gap, 3/day & 21/week caps; shows immediately",
+                                text = "Bypass 10-min gap, $dailyCap/day & 21/week caps; shows immediately",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = palette.onCardSubtext
                             )
