@@ -34,7 +34,6 @@ import com.example.widget.WidgetAndFloatingBridge
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.text.NumberFormat
@@ -180,7 +179,7 @@ object ReminderScheduler {
             .apply()
     }
 
-    fun scheduleReminders(
+    suspend fun scheduleReminders(
         context: Context,
         enabled: Boolean,
         r1Hour: Int,
@@ -374,7 +373,10 @@ object ReminderScheduler {
         }
     }
 
-    fun cancelAll(context: Context, alarmManager: AlarmManager? = null) {
+    // Round 1 S-P2-6 (SM-D1): was a plain fun that runBlocking-blocked the
+    // calling thread (the main thread on sign-out / delete-account) to clear
+    // DataStore. Now suspend — every call site already runs in a coroutine.
+    suspend fun cancelAll(context: Context, alarmManager: AlarmManager? = null) {
         // Wipe the saved schedule config and the reminder quota (last-sent) state so
         // reminders cannot resurrect from stale persisted state after logout / delete account.
         try {
@@ -386,9 +388,7 @@ object ReminderScheduler {
         } catch (_: Exception) {
         }
         try {
-            runBlocking {
-                context.applicationContext.reminderPrefs.edit { it.clear() }
-            }
+            context.applicationContext.reminderPrefs.edit { it.clear() }
         } catch (_: Exception) {
         }
         val am = alarmManager ?: (context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager)
