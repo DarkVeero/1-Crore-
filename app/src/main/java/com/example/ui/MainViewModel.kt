@@ -2063,7 +2063,7 @@ class MainViewModel(
         }
     }
 
-    private fun restoreDownloadedApkIfReady(update: AppUpdateInfo) {
+    private fun restoreDownloadedApkIfReady(update: AppUpdateInfo, autoShow: Boolean) {
         val downloadsDir = appContext.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS) ?: return
         val file = java.io.File(downloadsDir, "1crore-update-${update.versionCode}.apk")
         if (!file.exists() || file.length() == 0L || !AppUpdateManager.isValidApkFile(appContext, file)) return
@@ -2074,7 +2074,12 @@ class MainViewModel(
             downloadStatusText = "Download complete",
             needsInstallPermission = false,
             pendingInstallReady = true,
-            showDialog = true,
+            // Round 1 U-P2-1: the dialog only auto-opens when the Later
+            // cooldown allows it (autoShow). The old code set showDialog =
+            // true whenever a downloaded APK existed, so "Later" was
+            // bypassed on the next app open. The install stays reachable
+            // meanwhile via Home's update badge / "Install now".
+            showDialog = updateStateFlow.value.showDialog || autoShow,
             errorMessage = null
         )
     }
@@ -2091,7 +2096,7 @@ class MainViewModel(
                 val cached = AppUpdateManager.getCachedAvailableUpdate(appContext)
                 if (cached != null) {
                     val autoShow = AppUpdateManager.shouldAutoShowDialog(appContext, cached)
-                    restoreDownloadedApkIfReady(cached)
+                    restoreDownloadedApkIfReady(cached, autoShow)
                     updateStateFlow.value = updateStateFlow.value.copy(
                         availableUpdate = cached,
                         showDialog = updateStateFlow.value.showDialog || autoShow,
@@ -2112,7 +2117,7 @@ class MainViewModel(
                     updateStateFlow.value = UpdateUiState(isCheckSettled = true)
                 } else {
                     val autoShow = AppUpdateManager.shouldAutoShowDialog(appContext, latest)
-                    restoreDownloadedApkIfReady(latest)
+                    restoreDownloadedApkIfReady(latest, autoShow)
                     updateStateFlow.value = updateStateFlow.value.copy(
                         availableUpdate = latest,
                         showDialog = updateStateFlow.value.showDialog || autoShow,
