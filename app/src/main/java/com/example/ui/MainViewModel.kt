@@ -2146,6 +2146,21 @@ class MainViewModel(
         )
     }
 
+    // Round 1 U-NEW-1 (user, 28 Nov): hide the update dialog WITHOUT cancelling
+    // the download and WITHOUT marking it dismissed-for-today — the download
+    // keeps running in the background while the user uses the app. The Home
+    // update badge keeps showing progress; when the download finishes, the
+    // ReadyToInstall state sets showDialog = true, so the install popup
+    // comes back to the front on its own.
+    fun hideUpdateDialogTemporarily() {
+        val current = updateStateFlow.value.availableUpdate ?: return
+        if (current.isForced) return
+        updateStateFlow.value = updateStateFlow.value.copy(
+            showDialog = false,
+            isCheckSettled = true
+        )
+    }
+
     fun dismissUpdateDialogForToday() {
         val current = updateStateFlow.value.availableUpdate ?: return
         val state = updateStateFlow.value

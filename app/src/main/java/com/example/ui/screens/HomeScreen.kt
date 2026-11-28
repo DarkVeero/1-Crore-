@@ -39,6 +39,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -153,6 +154,7 @@ fun HomeScreen(
     onAnnouncementAction: (AnnouncementItem) -> Unit = {},
     onOpenUpdateDialog: () -> Unit,
     onDismissUpdateDialog: () -> Unit,
+    onMinimiseUpdateDownload: () -> Unit = {},
     onCancelUpdateDownload: () -> Unit,
     onUpdateNow: () -> Unit
 ) {
@@ -304,7 +306,11 @@ fun HomeScreen(
                         }
                     }
                     if (uiState.availableUpdate != null) {
-                        UpdateBadgeIconButton(onClick = onOpenUpdateDialog)
+                        UpdateBadgeIconButton(
+                            onClick = onOpenUpdateDialog,
+                            isDownloading = uiState.isDownloadingUpdate,
+                            downloadProgress = uiState.updateDownloadProgress
+                        )
                     }
                 }
                 Spacer(modifier = Modifier.height(6.dp))
@@ -608,6 +614,7 @@ fun HomeScreen(
             errorMessage = uiState.updateErrorMessage,
             onUpdateNow = onUpdateNow,
             onDismiss = onDismissUpdateDialog,
+            onMinimiseDownload = onMinimiseUpdateDownload,
             onCancelDownload = onCancelUpdateDownload
         )
     } else if (isAnnouncementVisible && uiState.activeAnnouncement != null) {
@@ -709,7 +716,9 @@ fun GlobalCounterTopLeftBlock(
 
 @Composable
 private fun UpdateBadgeIconButton(
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    isDownloading: Boolean = false,
+    downloadProgress: Float? = null
 ) {
     val palette = AppThemeColors.palette
     IconButton(
@@ -719,21 +728,37 @@ private fun UpdateBadgeIconButton(
             .testTag("home_update_badge_button")
     ) {
         Box(modifier = Modifier.size(26.dp)) {
+            // Round 1 U-NEW-1: while the update downloads in the background
+            // (dialog minimised), the badge shows live progress so the user
+            // can see it running and tap back into the dialog.
+            if (isDownloading) {
+                CircularProgressIndicator(
+                    progress = { downloadProgress ?: 0f },
+                    color = palette.accent,
+                    trackColor = palette.track,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier
+                        .size(26.dp)
+                        .align(Alignment.Center)
+                )
+            }
             Icon(
                 imageVector = Icons.Outlined.SystemUpdate,
-                contentDescription = "Update available",
+                contentDescription = if (isDownloading) "Update downloading" else "Update available",
                 tint = palette.onCanvas,
                 modifier = Modifier
                     .size(22.dp)
                     .align(Alignment.Center)
             )
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .align(Alignment.TopEnd)
-                    .background(palette.accent, CircleShape)
-                    .border(1.5.dp, palette.canvasBackground, CircleShape)
-            )
+            if (!isDownloading) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .align(Alignment.TopEnd)
+                        .background(palette.accent, CircleShape)
+                        .border(1.5.dp, palette.canvasBackground, CircleShape)
+                )
+            }
         }
     }
 }
@@ -841,6 +866,7 @@ internal fun AppUpdateDialog(
     errorMessage: String?,
     onUpdateNow: () -> Unit,
     onDismiss: () -> Unit,
+    onMinimiseDownload: () -> Unit = {},
     onCancelDownload: () -> Unit
 ) {
     val palette = AppThemeColors.palette
@@ -970,6 +996,23 @@ internal fun AppUpdateDialog(
                                     .padding(10.dp)
                                     .testTag("update_error_banner")
                             )
+                        }
+                    }
+                    // Round 1 U-NEW-1 (user, 28 Nov): the download keeps running
+                    // in the background while the user uses the app. This only
+                    // hides the dialog — it does NOT cancel the download and does
+                    // NOT mark it dismissed-for-today. The Home badge keeps showing
+                    // progress, and the install popup comes back to the front by
+                    // itself when the download finishes. Full-width row so the
+                    // label never overflows on narrow phones.
+                    if (isDownloading && !update.isForced) {
+                        TextButton(
+                            onClick = onMinimiseDownload,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("update_minimise_download_button")
+                        ) {
+                            Text("Background me chalao", color = palette.onCardSubtext)
                         }
                     }
                     Row(

@@ -792,6 +792,7 @@ internal fun MainTabScaffold(
                             onAnnouncementAction = viewModel::onAnnouncementActionClicked,
                             onOpenUpdateDialog = viewModel::openUpdateDialog,
                             onDismissUpdateDialog = viewModel::dismissUpdateDialogForToday,
+                            onMinimiseUpdateDownload = viewModel::hideUpdateDialogTemporarily,
                             onCancelUpdateDownload = viewModel::cancelUpdateDownload,
                             onUpdateNow = viewModel::onUpdateNowClicked
                         )
