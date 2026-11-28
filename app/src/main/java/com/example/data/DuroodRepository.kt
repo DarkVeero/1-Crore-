@@ -1851,6 +1851,18 @@ fun observeRecentDays(userId: String, limit: Int): Flow<List<DailyCountEntity>> 
         return expiredUnpublished
     }
 
+    // Round 1 P2-4: how many announcements are saved on this phone but not
+    // yet published to the cloud (and not expired). Drives the persistent
+    // pending indicator in Settings; 0 when nothing is waiting.
+    suspend fun countPendingAnnouncementCloudWrites(
+        context: Context,
+        nowMillis: Long = System.currentTimeMillis()
+    ): Int {
+        val all = com.example.announcements.AnnouncementScheduleStore
+            .getAllAnnouncements(context.applicationContext)
+        return all.count { !it.cloudPublished && nowMillis <= it.endAtMillis }
+    }
+
     suspend fun deleteAnnouncement(announcementId: String): Result<Unit> {
         val cleanId = announcementId.trim()
         if (cleanId.isEmpty() || MilestoneAnnouncementManager.isMilestoneAnnouncementId(cleanId)) {

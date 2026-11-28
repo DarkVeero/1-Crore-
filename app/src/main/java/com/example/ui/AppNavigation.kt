@@ -847,6 +847,9 @@ internal fun MainTabScaffold(
         var announcementDailyCap by remember {
             mutableStateOf(AnnouncementFrequencyStore.configuredMaxShowsPerDay)
         }
+        // Round 1 P2-4: announcements saved on this phone but not yet
+        // published to the cloud, shown persistently in Settings.
+        val pendingAnnouncementCount by viewModel.pendingAnnouncementCountFlow.collectAsStateWithLifecycle()
                         SettingsScreen(
                             uiState = uiState,
                             onUpdateDisplayName = viewModel::onUpdateDisplayName,
@@ -861,6 +864,7 @@ internal fun MainTabScaffold(
                             userEmail = userEmail,
                             onScheduleAnnouncement = viewModel::scheduleOrPublishAnnouncement,
                             announcementDailyCap = announcementDailyCap,
+                            pendingAnnouncementCount = pendingAnnouncementCount,
                             onAnnouncementDailyCapChange = { value ->
                                 AnnouncementFrequencyStore.setConfiguredMaxShowsPerDay(context, value)
                                 announcementDailyCap = AnnouncementFrequencyStore.configuredMaxShowsPerDay

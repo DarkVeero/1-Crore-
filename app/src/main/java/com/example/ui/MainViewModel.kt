@@ -256,6 +256,10 @@ class MainViewModel(
     private val announcementHistoryFlow = MutableStateFlow(
         AnnouncementHistoryStore.getHistoryNewestFirst(appContext, currentUserId)
     )
+    // Round 1 P2-4: announcements saved on this phone but not yet published
+    // to the cloud. Shown persistently in Settings until the retry sends
+    // them or they expire.
+    val pendingAnnouncementCountFlow = MutableStateFlow(0)
     private val badgeRefreshTickFlow = MutableStateFlow(0)
     private val pendingMilestoneBadgeFlow = MutableStateFlow<MilestoneBadge?>(null)
     private val userGroupsFlow = MutableStateFlow(
@@ -618,6 +622,7 @@ class MainViewModel(
             if (expired.isNotEmpty()) {
                 statusMessageFlow.value = "Could not send — announcement expired"
             }
+            refreshPendingAnnouncementCount()
         }
 
         // Auto-sync whenever internet connectivity returns
@@ -629,6 +634,7 @@ class MainViewModel(
                     if (expired.isNotEmpty()) {
                         statusMessageFlow.value = "Could not send — announcement expired"
                     }
+                    refreshPendingAnnouncementCount()
                     if (initialLoadOfflineErrorFlow.value) {
                         retryInitialLoad()
                     } else {
@@ -655,8 +661,20 @@ class MainViewModel(
                 val hasPendingSync = runCatching {
                     repository.observeHasPendingSync(currentUserId).first()
                 }.getOrDefault(false)
-                if (NetworkMonitor.isCurrentlyOnline(appContext) && hasPendingSync) {
-                    triggerSync(silent = true)
+                // Round 1 P2-4: a failed announcement write used to wait for
+                // the next app start / reconnect while the app stayed open.
+                // Retry it on every 5-minute tick while online, whether or
+                // not any counts are pending, and keep the Settings
+                // indicator true.
+                if (NetworkMonitor.isCurrentlyOnline(appContext)) {
+                    val expired = runCatching { repository.retryPendingAnnouncementCloudWrites(appContext) }.getOrDefault(emptyList())
+                    if (expired.isNotEmpty()) {
+                        statusMessageFlow.value = "Could not send — announcement expired"
+                    }
+                    refreshPendingAnnouncementCount()
+                    if (hasPendingSync) {
+                        triggerSync(silent = true)
+                    }
                 }
             }
         }
@@ -1396,6 +1414,7 @@ class MainViewModel(
                         "Announcement scheduled"
                     }
                     statusMessageFlow.value = message
+                    refreshPendingAnnouncementCount()
                     if (!isFuture && saved.cloudPublished) {
                         refreshAnnouncements()
                     }
@@ -1442,6 +1461,7 @@ class MainViewModel(
                         activeAnnouncementFlow.value = null
                     }
                     refreshAnnouncementHistory()
+                    refreshPendingAnnouncementCount()
                     val message = "Announcement deleted"
                     statusMessageFlow.value = message
                     onComplete?.invoke(true, message)
@@ -1498,6 +1518,17 @@ class MainViewModel(
             latestActiveDateKey = latestActiveDay?.dateKey ?: cachedAudience?.latestActiveDateKey
         ).also {
             AnnouncementFrequencyStore.cacheAudienceContext(appContext, currentUserId, it)
+        }
+    }
+
+    // Round 1 P2-4: re-read how many announcements are still waiting for
+    // their cloud write, so the Settings indicator stays true while the app
+    // is open. Cheap local-store read; safe to call after every retry.
+    private fun refreshPendingAnnouncementCount() {
+        viewModelScope.launch {
+            pendingAnnouncementCountFlow.value = runCatching {
+                repository.countPendingAnnouncementCloudWrites(appContext)
+            }.getOrDefault(0)
         }
     }
 

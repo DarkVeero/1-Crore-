@@ -113,7 +113,10 @@ fun SettingsScreen(
     onScheduleAnnouncement: (AnnouncementItem) -> Unit = {},
     // R4-D9: the daily announcement cap is a real owner setting (3..5/day).
     announcementDailyCap: Int = AnnouncementFrequencyStore.DEFAULT_DAILY_CAP,
-    onAnnouncementDailyCapChange: (Int) -> Unit = {}
+    onAnnouncementDailyCapChange: (Int) -> Unit = {},
+    // Round 1 P2-4: announcements saved on this phone but not yet published
+    // to the cloud. Shown persistently until the retry sends them.
+    pendingAnnouncementCount: Int = 0
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -538,6 +541,24 @@ fun SettingsScreen(
                         onClick = { showScheduleAnnouncementDialog = true },
                         testTag = "settings_schedule_announcement_row"
                     )
+                    // Round 1 P2-4: persistent pending indicator — a failed
+                    // cloud write used to show only a transient toast, so an
+                    // owner could not tell anything was still unsent.
+                    if (pendingAnnouncementCount > 0) {
+                        Text(
+                            text = if (pendingAnnouncementCount == 1) {
+                                "1 announcement saved on this phone — will send when online"
+                            } else {
+                                "$pendingAnnouncementCount announcements saved on this phone — will send when online"
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = palette.accent,
+                            modifier = Modifier
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                .testTag("settings_pending_announcements")
+                        )
+                        HorizontalDivider(color = palette.hairline)
+                    }
                     // R4-D9: how many announcements may show per day (3..5).
                     Row(
                         modifier = Modifier
