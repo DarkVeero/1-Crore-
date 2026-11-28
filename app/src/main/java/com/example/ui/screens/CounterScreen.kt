@@ -192,16 +192,37 @@ fun CounterScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxWidth(0.84f)
             ) {
-                TextButton(
-                    onClick = onOpenCustomCounters,
-                    modifier = Modifier.testTag("counter_open_custom_counters_button")
+                // Round 1 C-P2-2: the CustomAmountDialog below was dead code
+                // — nothing on this tab could open it (the widget's custom
+                // action opens it on Home instead). This button makes the
+                // dialog reachable from the Counter tab itself, like Home's
+                // "Custom Add" button.
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "Custom Counters",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = palette.onCanvas,
-                        fontWeight = FontWeight.Medium
-                    )
+                    TextButton(
+                        onClick = { showCustomDialog = true },
+                        modifier = Modifier.testTag("counter_custom_add_button")
+                    ) {
+                        Text(
+                            text = "Custom Add",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = palette.onCanvas,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    TextButton(
+                        onClick = onOpenCustomCounters,
+                        modifier = Modifier.testTag("counter_open_custom_counters_button")
+                    ) {
+                        Text(
+                            text = "Custom Counters",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = palette.onCanvas,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
             }
         }
