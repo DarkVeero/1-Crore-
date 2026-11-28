@@ -1061,6 +1061,11 @@ class MainViewModel(
                 syncInFlight.set(false)
                 isSyncingFlow.value = false
             } else if (isReallyActive) {
+                // Round 1 sync P3-4: a tap while a silent sync is in flight
+                // used to return with no feedback at all — the button still
+                // said "Sync Now" and looked dead. Say so; the button itself
+                // flips to "Syncing..." via isSyncingFlow below.
+                statusMessageFlow.value = "Syncing…"
                 return
             } else {
                 syncInFlight.set(false)
@@ -1077,6 +1082,11 @@ class MainViewModel(
 
         syncInFlight.set(true)
         syncStartedAtMillis = now
+        // Round 1 sync P3-4: show "Syncing..." at once. The job used to set
+        // this only after the online check + profile read, so between the tap
+        // and that point the button still said "Sync Now" and a second tap
+        // looked dead. The job's finally{} clears it again.
+        isSyncingFlow.value = true
         syncJob = viewModelScope.launch {
             try {
                 if (!NetworkMonitor.isCurrentlyOnline(appContext)) {
