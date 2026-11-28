@@ -954,7 +954,9 @@ object AppUpdateManager {
         persistedId to candidateFile
     }
 
-    private suspend fun findResumableDownloadId(context: Context): Long {
+    // Round 1 U-P2-5: public so MainViewModel can re-attach the UI to an
+    // in-progress download when the app reopens after being killed mid-download.
+    suspend fun findResumableDownloadId(context: Context): Long {
         val dm = context.applicationContext.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager ?: return -1L
         val persistedId = context.applicationContext.updatePrefs.data.first()[KEY_PENDING_DOWNLOAD_ID] ?: return -1L
         if (persistedId <= 0L) return -1L

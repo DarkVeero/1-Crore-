@@ -2103,6 +2103,7 @@ class MainViewModel(
                         isCheckSettled = true
                     )
                     restoreDownloadedUpdateIfAvailable(cached)
+                    resumeInProgressDownloadIfAny(cached)
                     settleWatchdog.cancel()
                 }
 
@@ -2124,6 +2125,7 @@ class MainViewModel(
                         isCheckSettled = true
                     )
                     restoreDownloadedUpdateIfAvailable(latest)
+                    resumeInProgressDownloadIfAny(latest)
                 }
             } finally {
                 settleWatchdog.cancel()
@@ -2251,32 +2253,43 @@ class MainViewModel(
             return
         }
 
-        activeDownloadJob = viewModelScope.launch {
-            updateStateFlow.value = updateStateFlow.value.copy(
-                isPreparingUpdate = true,
-                isDownloading = false,
-                downloadProgress = null,
-                downloadStatusText = "Syncing your counts to cloud...",
-                needsInstallPermission = false,
-                pendingInstallReady = false,
-                errorMessage = null
-            )
+        startDownloadObservation(current, isResume = false)
+    }
 
-            // Mandatory pre-install Firestore batch sync before starting download/install
-            if (NetworkMonitor.isCurrentlyOnline(appContext)) {
-                isSyncingFlow.value = true
-                try {
-                    withTimeoutOrNull(10_000L) { repository.syncWithCloud() }
-                } finally {
-                    isSyncingFlow.value = false
+    // Round 1 U-P2-5: observes the DownloadManager download for [current],
+    // re-attaching to an in-progress one when the app was killed mid-download.
+    // [isResume] skips the pre-install sync (it already ran when the user
+    // first tapped "Update now") and shows "Resuming download...".
+    private fun startDownloadObservation(current: AppUpdateInfo, isResume: Boolean) {
+        activeDownloadJob = viewModelScope.launch {
+            if (!isResume) {
+                updateStateFlow.value = updateStateFlow.value.copy(
+                    isPreparingUpdate = true,
+                    isDownloading = false,
+                    downloadProgress = null,
+                    downloadStatusText = "Syncing your counts to cloud...",
+                    needsInstallPermission = false,
+                    pendingInstallReady = false,
+                    errorMessage = null
+                )
+
+                // Mandatory pre-install Firestore batch sync before starting download/install
+                if (NetworkMonitor.isCurrentlyOnline(appContext)) {
+                    isSyncingFlow.value = true
+                    try {
+                        withTimeoutOrNull(10_000L) { repository.syncWithCloud() }
+                    } finally {
+                        isSyncingFlow.value = false
+                    }
                 }
+
             }
 
             updateStateFlow.value = updateStateFlow.value.copy(
                 isPreparingUpdate = false,
                 isDownloading = true,
                 downloadProgress = null,
-                downloadStatusText = "Starting download..."
+                downloadStatusText = if (isResume) "Resuming download..." else "Starting download..."
             )
 
             AppUpdateManager.downloadApk(appContext, current).collect { downloadState ->
@@ -2344,6 +2357,25 @@ class MainViewModel(
                         )
                     }
                 }
+            }
+        }
+        }
+    }
+
+    // Round 1 U-P2-5: the user killed the app mid-download, the download kept
+    // running in DownloadManager, but reopening the app showed no progress at
+    // all — it looked like the download never started. Re-attach the UI to the
+    // in-progress download so progress shows again. Completed downloads are
+    // handled by restoreDownloadedApkIfReady; this only covers RUNNING / PAUSED
+    // / PENDING ones.
+    private fun resumeInProgressDownloadIfAny(update: AppUpdateInfo) {
+        val state = updateStateFlow.value
+        if (state.pendingInstallReady || state.isDownloading || state.isPreparingUpdate) return
+        if (downloadedApkFile != null) return
+        if (activeDownloadJob?.isActive == true) return
+        viewModelScope.launch {
+            if (AppUpdateManager.findResumableDownloadId(appContext) > 0L) {
+                startDownloadObservation(update, isResume = true)
             }
         }
     }
