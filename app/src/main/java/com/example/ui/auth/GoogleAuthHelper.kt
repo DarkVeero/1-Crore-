@@ -35,10 +35,37 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeoutOrNull
 
 internal const val GOOGLE_CREDENTIAL_TIMEOUT_MS = 15_000L
 internal const val GOOGLE_FIREBASE_SIGN_IN_TIMEOUT_MS = 10_000L
+internal const val EMAIL_AUTH_TIMEOUT_MS = 15_000L
+
+/**
+ * Runs a Firebase Auth call with a timeout. Round 1 A-P2-3: bare .await()
+ * calls hung forever on a dead network (no timeout, no cancel), leaving the
+ * user staring at a spinner. Returns Result.failure with a
+ * TimeoutCancellationException on expiry, so the caller's normal error
+ * mapping shows a timeout message instead of hanging. A genuine external
+ * cancellation still propagates (never swallowed into a Result).
+ */
+suspend fun <T> runAuthWithTimeout(
+    timeoutMillis: Long = EMAIL_AUTH_TIMEOUT_MS,
+    block: suspend () -> T
+): Result<T> {
+    val value = withTimeoutOrNull(timeoutMillis) { block() }
+    return if (value != null) {
+        Result.success(value)
+    } else {
+        Result.failure(
+            TimeoutCancellationException(
+                "Request timed out after ${timeoutMillis / 1000} seconds. " +
+                    "Please check your internet connection and try again."
+            )
+        )
+    }
+}
 
 internal const val GOOGLE_CREDENTIAL_TIMEOUT_MESSAGE =
     "Google Sign-In timed out waiting for Google Play Services. Please check your internet connection and try again."
@@ -325,12 +352,18 @@ fun attemptAutoSignIn(
     scope.launch {
         try {
             val hostContext = findHostActivity(context) ?: context
-            val result = credentialManager.getCredential(hostContext, request)
+            // Round 1 A-P2-3: bounded — a hung credential fetch or sign-in
+            // used to leave the app stuck on the login screen forever.
+            val result = runAuthWithTimeout(GOOGLE_CREDENTIAL_TIMEOUT_MS) {
+                credentialManager.getCredential(hostContext, request)
+            }.getOrThrow()
             val credential = result.credential
             if (credential is CustomCredential && credential.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
                 val googleIdToken = GoogleIdTokenCredential.createFrom(credential.data).idToken
                 val authCredential = GoogleAuthProvider.getCredential(googleIdToken, null)
-                Firebase.auth.signInWithCredential(authCredential).await()
+                runAuthWithTimeout(GOOGLE_FIREBASE_SIGN_IN_TIMEOUT_MS) {
+                    Firebase.auth.signInWithCredential(authCredential).await()
+                }.getOrThrow()
                 Firebase.auth.currentUser?.uid?.let { uid ->
                     AuthFlowStore.markGoogleSignIn(context, uid)
                 }
@@ -338,6 +371,9 @@ fun attemptAutoSignIn(
             } else {
                 onUnauthenticated()
             }
+        } catch (e: TimeoutCancellationException) {
+            Log.w("Auth", "Auto sign-in timed out", e)
+            onUnauthenticated()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -395,12 +431,18 @@ private suspend fun tryReauthenticateWithGoogle(
             autoSelectEnabled = true
         )
         val hostContext = findHostActivity(context) ?: context
-        val result = credentialManager.getCredential(hostContext, request)
+        // Round 1 A-P2-5: bounded — the Google re-auth for delete used to
+        // hang forever (and the dialog was undismissable while it hung).
+        val result = runAuthWithTimeout(GOOGLE_CREDENTIAL_TIMEOUT_MS) {
+            credentialManager.getCredential(hostContext, request)
+        }.getOrElse { return Result.failure(it) }
         val credential = result.credential
         if (credential is CustomCredential && credential.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
             val googleIdToken = GoogleIdTokenCredential.createFrom(credential.data).idToken
             val authCredential = GoogleAuthProvider.getCredential(googleIdToken, null)
-            user.reauthenticate(authCredential).await()
+            runAuthWithTimeout(GOOGLE_FIREBASE_SIGN_IN_TIMEOUT_MS) {
+                user.reauthenticate(authCredential).await()
+            }.getOrElse { return Result.failure(it) }
             Result.success(Unit)
         } else {
             Result.failure(IllegalStateException(GOOGLE_NO_CREDENTIAL_MESSAGE))

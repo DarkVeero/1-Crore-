@@ -95,6 +95,7 @@ import com.google.firebase.auth.UserProfileChangeRequest
 import com.google.firebase.auth.auth
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -560,15 +561,28 @@ fun AuthScreen(
                                     try {
                                         val auth = Firebase.auth
                                         if (mode == AuthMode.LOGIN) {
-                                            auth.signInWithEmailAndPassword(cleanEmail, password).await()
-                                            runCatching { auth.currentUser?.reload()?.await() }
+                                            // Round 1 A-P2-3: bounded — a hung
+                                            // sign-in used to spin forever.
+                                            runAuthWithTimeout {
+                                                auth.signInWithEmailAndPassword(cleanEmail, password).await()
+                                            }.getOrThrow()
+                                            // Round 1 A-P2-3: bounded too — a
+                                            // hung reload here used to strand
+                                            // the user on the login screen.
+                                            runCatching {
+                                                runAuthWithTimeout {
+                                                    auth.currentUser?.reload()?.await()
+                                                }.getOrThrow()
+                                            }
                                             auth.currentUser?.uid?.let { signedInUid ->
                                                 AuthFlowStore.markEmailSignIn(context, signedInUid)
                                             }
                                             isLoading = false
                                             onAuthChanged()
                                         } else {
-                                            val result = auth.createUserWithEmailAndPassword(cleanEmail, password).await()
+                                            val result = runAuthWithTimeout {
+                                                auth.createUserWithEmailAndPassword(cleanEmail, password).await()
+                                            }.getOrThrow()
                                             val user = result.user
                                             if (user != null) {
                                                 val uid = user.uid
@@ -769,7 +783,9 @@ fun VerifyEmailScreen(
     suspend fun checkVerificationSilently() {
         try {
             val user = Firebase.auth.currentUser ?: return
-            user.reload().await()
+            // Round 1 A-P2-3: bounded silent check — a hung reload used to
+            // stall this check; on timeout just retry on the next tick.
+            runAuthWithTimeout { user.reload().await() }.getOrNull() ?: return
             if (Firebase.auth.currentUser?.isEmailVerified == true) {
                 onVerified()
             }
@@ -796,19 +812,31 @@ fun VerifyEmailScreen(
         statusMessage = null
         var verified = false
         try {
-            Firebase.auth.applyActionCode(code).await()
-            Firebase.auth.currentUser?.reload()?.await()
+            // Round 1 A-P2-3: bounded — applying the link used to hang with
+            // no timeout. The TimeoutCancellationException catch below must
+            // stay BEFORE the CancellationException catch, or a timeout
+            // would be rethrown out of this LaunchedEffect.
+            runAuthWithTimeout {
+                Firebase.auth.applyActionCode(code).await()
+            }.getOrThrow()
+            runAuthWithTimeout {
+                Firebase.auth.currentUser?.reload()?.await()
+            }.getOrThrow()
             if (Firebase.auth.currentUser?.isEmailVerified == true) {
                 verified = true
                 onVerified()
             } else {
                 statusMessage = "Email not verified yet — please check your inbox and tap the verification link."
             }
+        } catch (e: TimeoutCancellationException) {
+            statusMessage = mapFirebaseAuthError(e)
         } catch (e: CancellationException) {
             throw e
         } catch (e: FirebaseAuthActionCodeException) {
             try {
-                Firebase.auth.currentUser?.reload()?.await()
+                runAuthWithTimeout {
+                    Firebase.auth.currentUser?.reload()?.await()
+                }.getOrThrow()
             } catch (_: Exception) {
             }
             if (Firebase.auth.currentUser?.isEmailVerified == true) {
@@ -822,7 +850,9 @@ fun VerifyEmailScreen(
             }
         } catch (e: Exception) {
             try {
-                Firebase.auth.currentUser?.reload()?.await()
+                runAuthWithTimeout {
+                    Firebase.auth.currentUser?.reload()?.await()
+                }.getOrThrow()
             } catch (_: Exception) {
             }
             if (Firebase.auth.currentUser?.isEmailVerified == true) {
@@ -1209,8 +1239,17 @@ fun LinkPasswordScreen(
                             scope.launch {
                                 try {
                                     val credential = EmailAuthProvider.getCredential(email, password)
-                                    user.linkWithCredential(credential).await()
-                                    user.reload().await()
+                                    // Round 1 A-P2-3: bounded — the link call
+                                    // used to hang with no timeout.
+                                    runAuthWithTimeout {
+                                        user.linkWithCredential(credential).await()
+                                    }.getOrThrow()
+                                    // Round 1 A-P2-3: bounded too.
+                                    runCatching {
+                                        runAuthWithTimeout {
+                                            user.reload().await()
+                                        }.getOrThrow()
+                                    }
                                     isSaving = false
                                     onLinked()
                                 } catch (e: Exception) {
@@ -1310,7 +1349,11 @@ private fun ForgotPasswordDialog(
                         dialogError = null
                         scope.launch {
                             try {
-                                Firebase.auth.sendPasswordResetEmail(clean).await()
+                                // Round 1 A-P2-3: bounded — the reset-email
+                                // call used to hang with no timeout.
+                                runAuthWithTimeout {
+                                    Firebase.auth.sendPasswordResetEmail(clean).await()
+                                }.getOrThrow()
                                 isSending = false
                                 onSent(clean)
                             } catch (e: Exception) {
@@ -1351,6 +1394,8 @@ fun mapVerificationActionCodeError(
 
 fun mapFirebaseAuthError(error: Exception): String {
     return when (error) {
+        // Round 1 A-P2-3: timeouts from runAuthWithTimeout.
+        is TimeoutCancellationException -> "Request timed out. Please check your internet connection and try again."
         is FirebaseNetworkException -> "No internet connection. Please connect and try again."
         is FirebaseAuthInvalidUserException -> "No account found for this email address."
         is FirebaseAuthInvalidCredentialsException -> "Incorrect email or password. Please check and try again."

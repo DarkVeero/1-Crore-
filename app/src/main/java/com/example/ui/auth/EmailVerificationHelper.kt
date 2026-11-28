@@ -8,6 +8,7 @@ import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.auth
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -35,7 +36,18 @@ fun buildVerificationActionCodeSettings(context: Context): ActionCodeSettings {
 }
 
 suspend fun sendVerificationEmail(context: Context, user: FirebaseUser) {
-    user.sendEmailVerification(buildVerificationActionCodeSettings(context)).await()
+    // Round 1 A-P2-3: bounded — the send used to hang with no timeout. The
+    // timeout is surfaced as an ordinary failure (NOT a
+    // TimeoutCancellationException), so callers' CancellationException
+    // rethrow paths never see it — a timeout retries / shows a message
+    // instead of escaping as a cancellation.
+    runAuthWithTimeout {
+        user.sendEmailVerification(buildVerificationActionCodeSettings(context)).await()
+    }.getOrElse {
+        throw IllegalStateException(
+            it.message ?: "Request timed out. Please check your internet connection and try again."
+        )
+    }
 }
 
 /**
@@ -176,7 +188,13 @@ object EmailVerificationAutoSender {
 
         // Ensure the newly created user's auth token is fresh and ready before sending
         try {
-            readyUser.getIdToken(false).await()
+            // Round 1 A-P2-3: bounded — a hung token refresh used to stall
+            // the auto-send. A timeout is swallowed like any other failure
+            // (the TimeoutCancellationException catch must stay BEFORE the
+            // CancellationException catch, or the timeout would propagate).
+            runAuthWithTimeout { readyUser.getIdToken(false).await() }.getOrThrow()
+        } catch (e: TimeoutCancellationException) {
+            // Proceed to the send attempt with the existing token.
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
@@ -187,11 +205,13 @@ object EmailVerificationAutoSender {
             onBeforeRetry = {
                 val u = Firebase.auth.currentUser ?: readyUser
                 try {
-                    u.reload().await()
+                    // Round 1 A-P2-3: bounded — these refresh calls used to
+                    // hang with no timeout before the retry.
+                    runAuthWithTimeout { u.reload().await() }.getOrThrow()
                 } catch (_: Exception) {
                 }
                 try {
-                    u.getIdToken(true).await()
+                    runAuthWithTimeout { u.getIdToken(true).await() }.getOrThrow()
                 } catch (_: Exception) {
                 }
             },

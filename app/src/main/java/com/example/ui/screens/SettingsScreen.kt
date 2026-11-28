@@ -70,6 +70,7 @@ import com.example.data.DuroodRepository
 import com.example.notifications.ReminderScheduler
 import com.example.ui.MainUiState
 import com.example.ui.auth.mapFirebaseAuthError
+import com.example.ui.auth.runAuthWithTimeout
 import com.example.ui.auth.signOutUser
 import com.example.ui.components.BlackPillButton
 import com.example.ui.components.FaintGridBackground
@@ -87,6 +88,7 @@ import com.example.update.AppUpdateManager
 import com.google.firebase.Firebase
 import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.auth
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -712,7 +714,11 @@ fun SettingsScreen(
                 } else {
                     try {
                         val credential = EmailAuthProvider.getCredential(email, enteredPassword)
-                        user.reauthenticate(credential).await()
+                        // Round 1 A-P2-3: bounded — the delete re-auth used
+                        // to hang with no timeout.
+                        runAuthWithTimeout {
+                            user.reauthenticate(credential).await()
+                        }.getOrThrow()
                         Result.success(Unit)
                     } catch (e: Exception) {
                         Result.failure(IllegalArgumentException(mapFirebaseAuthError(e)))
@@ -880,14 +886,27 @@ private fun ChangePasswordDialog(
                         dialogError = null
                         scope.launch {
                             try {
+                                // Round 1 A-P2-3: bounded — every password
+                                // call here used to hang with no timeout.
                                 if (isGoogleOnly) {
                                     val credential = EmailAuthProvider.getCredential(email, newPassword)
-                                    user.linkWithCredential(credential).await()
-                                    user.reload().await()
+                                    runAuthWithTimeout {
+                                        user.linkWithCredential(credential).await()
+                                    }.getOrThrow()
+                                    // Round 1 A-P2-3: bounded too.
+                                    runCatching {
+                                        runAuthWithTimeout {
+                                            user.reload().await()
+                                        }.getOrThrow()
+                                    }
                                 } else {
                                     val credential = EmailAuthProvider.getCredential(email, currentPassword)
-                                    user.reauthenticate(credential).await()
-                                    user.updatePassword(newPassword).await()
+                                    runAuthWithTimeout {
+                                        user.reauthenticate(credential).await()
+                                    }.getOrThrow()
+                                    runAuthWithTimeout {
+                                        user.updatePassword(newPassword).await()
+                                    }.getOrThrow()
                                 }
                                 isSaving = false
                                 onPasswordChanged()
@@ -1159,9 +1178,18 @@ fun DeleteAccountConfirmDialog(
     var password by remember { mutableStateOf("") }
     var isVerifying by remember { mutableStateOf(false) }
     var passwordError by remember { mutableStateOf<String?>(null) }
+    // Round 1 A-P2-5: the verify job is retained so dismissing the dialog
+    // (back press, tap outside, Cancel) cancels the in-flight verification
+    // instead of trapping the user until it finishes. The re-auth itself is
+    // also bounded by runAuthWithTimeout now, so the wait is at most ~25s.
+    var verifyJob by remember { mutableStateOf<Job?>(null) }
 
     AlertDialog(
-        onDismissRequest = { if (!isVerifying) onDismiss() },
+        onDismissRequest = {
+            verifyJob?.cancel()
+            verifyJob = null
+            onDismiss()
+        },
         containerColor = palette.cardSurface,
         shape = RoundedCornerShape(16.dp),
         title = {
@@ -1210,8 +1238,11 @@ fun DeleteAccountConfirmDialog(
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(
-                    onClick = onDismiss,
-                    enabled = !isVerifying,
+                    onClick = {
+                        verifyJob?.cancel()
+                        verifyJob = null
+                        onDismiss()
+                    },
                     modifier = Modifier.testTag("delete_account_cancel_button")
                 ) {
                     Text("Cancel", color = palette.onCardSubtext)
@@ -1230,9 +1261,10 @@ fun DeleteAccountConfirmDialog(
                         }
                         isVerifying = true
                         passwordError = null
-                        scope.launch {
+                        verifyJob = scope.launch {
                             val result = onVerifyPassword(password)
                             isVerifying = false
+                            verifyJob = null
                             result.fold(
                                 onSuccess = {
                                     onConfirmDelete()
