@@ -11,5 +11,7 @@
     <string name="reminder_channel_desc">At most two daily reminders when today\'s daily target is incomplete.</string>
     <string name="announcement_channel_name">Announcements</string>
     <string name="announcement_channel_desc">Important community updates and announcements for 1 Crore.</string>
+    <string name="update_channel_name">App updates</string>
+    <string name="update_channel_desc">Tells you when an app update has finished downloading so you can install it.</string>
     <string name="widget_description">Track Today and Total Durood Pak with Add Custom, Open Counter, and Floating Button shortcuts.</string>
 </resources>

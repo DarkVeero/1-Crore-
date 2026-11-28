@@ -17,6 +17,7 @@ import com.example.announcements.AnnouncementLaunchRequest
 import com.example.announcements.AnnouncementNotificationHelper
 import com.example.ui.AppNavigation
 import com.example.ui.auth.extractVerificationOobCode
+import com.example.update.UpdateDownloadCompleteReceiver
 import com.example.ui.theme.AppThemeMode
 import com.example.ui.theme.OneCroreTheme
 import com.example.ui.theme.ThemePreferenceStore
@@ -26,6 +27,7 @@ class MainActivity : ComponentActivity() {
     private var pendingVerificationCode by mutableStateOf<String?>(null)
     private var pendingWidgetAction by mutableStateOf<String?>(null)
     private var pendingAnnouncementRequest by mutableStateOf<AnnouncementLaunchRequest?>(null)
+    private var pendingOpenUpdateInstall by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -38,6 +40,9 @@ class MainActivity : ComponentActivity() {
         pendingVerificationCode = extractVerificationOobCode(intent?.data)
         pendingWidgetAction = intent?.getStringExtra(OneCroreWidgetProvider.EXTRA_WIDGET_ACTION)
         pendingAnnouncementRequest = AnnouncementNotificationHelper.extractLaunchRequestFromIntent(intent)
+        pendingOpenUpdateInstall = intent?.getBooleanExtra(
+            UpdateDownloadCompleteReceiver.EXTRA_OPEN_UPDATE_INSTALL, false
+        ) == true
         val initialBarStyle = if (initialTheme == AppThemeMode.RED) {
             SystemBarStyle.dark(Color.TRANSPARENT)
         } else {
@@ -67,7 +72,9 @@ class MainActivity : ComponentActivity() {
                     pendingWidgetAction = pendingWidgetAction,
                     onConsumeWidgetAction = { pendingWidgetAction = null },
                     pendingAnnouncementRequest = pendingAnnouncementRequest,
-                    onConsumeAnnouncementRequest = { pendingAnnouncementRequest = null }
+                    onConsumeAnnouncementRequest = { pendingAnnouncementRequest = null },
+                    pendingOpenUpdateInstall = pendingOpenUpdateInstall,
+                    onConsumeOpenUpdateInstall = { pendingOpenUpdateInstall = false }
                 )
             }
         }
@@ -82,6 +89,12 @@ class MainActivity : ComponentActivity() {
         }
         AnnouncementNotificationHelper.extractLaunchRequestFromIntent(intent)?.let { request ->
             pendingAnnouncementRequest = request
+        }
+        if (intent.getBooleanExtra(
+                UpdateDownloadCompleteReceiver.EXTRA_OPEN_UPDATE_INSTALL, false
+            )
+        ) {
+            pendingOpenUpdateInstall = true
         }
     }
 }

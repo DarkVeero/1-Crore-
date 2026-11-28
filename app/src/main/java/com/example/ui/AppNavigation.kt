@@ -212,7 +212,9 @@ fun AppNavigation(
     pendingWidgetAction: String? = null,
     onConsumeWidgetAction: () -> Unit = {},
     pendingAnnouncementRequest: AnnouncementLaunchRequest? = null,
-    onConsumeAnnouncementRequest: () -> Unit = {}
+    onConsumeAnnouncementRequest: () -> Unit = {},
+    pendingOpenUpdateInstall: Boolean = false,
+    onConsumeOpenUpdateInstall: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -649,6 +651,22 @@ internal fun MainTabScaffold(
         navigateToTab(AppTab.HOME.route)
         viewModel.openAnnouncementFromNotification(request)
         onConsumeAnnouncementRequest()
+    }
+
+    // Round 1 U-P2-2: the user tapped the "Update download complete"
+    // notification (app was closed when the download finished). Open the
+    // install dialog once the downloaded APK is confirmed ready; if the
+    // update check settles without a ready APK, drop the request so it
+    // never pops a dialog for a later update.
+    LaunchedEffect(pendingOpenUpdateInstall, uiState.pendingApkInstallReady, uiState.isUpdateCheckSettled) {
+        if (!pendingOpenUpdateInstall) return@LaunchedEffect
+        if (uiState.pendingApkInstallReady) {
+            navigateToTab(AppTab.HOME.route)
+            viewModel.openUpdateDialog()
+            onConsumeOpenUpdateInstall()
+        } else if (uiState.isUpdateCheckSettled) {
+            onConsumeOpenUpdateInstall()
+        }
     }
 
     LaunchedEffect(currentRoute) {

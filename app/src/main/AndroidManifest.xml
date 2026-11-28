@@ -60,6 +60,14 @@
             android:exported="false" />
 
         <receiver
+            android:name=".update.UpdateDownloadCompleteReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.DOWNLOAD_COMPLETE" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
             android:name=".notifications.BootReceiver"
             android:exported="false">
             <intent-filter>
